@@ -59,6 +59,7 @@ __vec_base:
 
   .global irq_el1
 irq_el1:
+  msr daifset, #0b0010
   sub sp, sp, #IRQ_FRAME_SIZE
   stp x0, x1, [sp, #IRQ_FRAME_X0]
   stp x2, x3, [sp, #IRQ_FRAME_X2]
@@ -78,6 +79,7 @@ irq_el1:
   mrs x18, elr_el1
   str x18, [sp, #IRQ_FRAME_ELR]
   // TODO: spill q0–q7 once SIMD is enabled.
+  // irq_handler_el1 executes with IRQs masked.
   mov x0, sp
   bl irq_handler_el1
   mov x9, sp
