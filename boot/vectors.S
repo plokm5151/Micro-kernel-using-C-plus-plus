@@ -1,3 +1,11 @@
+// irq_el1 masks IRQs on entry so the prologue cannot nest interrupts, with
+// the mask/unmask happening before we spill registers in the irq_el1 prologue.
+// End-of-interrupt is driven from C (irq_handler_el1) prior to the register
+// restore epilogue so the GIC sees the EOI before state is popped.
+// Switching to per-CPU IRQ stacks requires revisiting the stack pointer setup
+// around the irq_el1 stack allocation (`sub sp, sp, #IRQ_FRAME_SIZE`).
+// The spill layout defined by IRQ_FRAME_* must be kept in sync with the frame
+// created in the irq_el1 prologue when reworking the per-CPU IRQ stack path.
   .align 11
   .global __vec_base
 __vec_base:
