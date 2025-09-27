@@ -5,3 +5,11 @@
 ## Quick Start
 ./scripts/devshell.sh
 make run
+
+## Host build prerequisites
+
+The `Makefile` expects the LLVM toolchain to be available on the host. If you
+build outside the provided Docker devshell, install at least `clang`,
+`clang++`, `lld`, and `llvm-ar` before running `make -j$(nproc)`; otherwise the
+build will fail with `No such file or directory` errors when invoking the
+compiler.
