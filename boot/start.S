@@ -3,7 +3,7 @@
   .extern kmain
   .extern __vec_base
 _start:
-  ldr x0, =_stack_top
+  ldr x0, =__boot_stack_top
   mov sp, x0
 
   adr x1, __vec_base
