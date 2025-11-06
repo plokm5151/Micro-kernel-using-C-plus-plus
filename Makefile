@@ -1,6 +1,28 @@
-CXX     := clang++-20
-CC      := clang-20
-LD      := ld.lld-20
+CLANG_CANDIDATES   := clang-20 clang-19 clang-18 clang-17 clang-16 clang-15 clang-14 clang
+CXX_CANDIDATES     := clang++-20 clang++-19 clang++-18 clang++-17 clang++-16 clang++-15 clang++-14 clang++
+LLD_CANDIDATES     := ld.lld-20 ld.lld-19 ld.lld-18 ld.lld-17 ld.lld-16 ld.lld-15 ld.lld-14 ld.lld
+
+find_program = $(firstword $(foreach prog,$(1),$(if $(shell command -v $(prog) >/dev/null 2>&1 && echo 1),$(prog))))
+
+ifeq ($(origin CC), default)
+CC := $(call find_program,$(CLANG_CANDIDATES))
+endif
+ifeq ($(origin CXX), default)
+CXX := $(call find_program,$(CXX_CANDIDATES))
+endif
+ifeq ($(origin LD), default)
+LD := $(call find_program,$(LLD_CANDIDATES))
+endif
+
+ifeq ($(strip $(CC)),)
+$(error Could not find any of the following C compilers: $(CLANG_CANDIDATES))
+endif
+ifeq ($(strip $(CXX)),)
+$(error Could not find any of the following C++ compilers: $(CXX_CANDIDATES))
+endif
+ifeq ($(strip $(LD)),)
+$(error Could not find any of the following linkers: $(LLD_CANDIDATES))
+endif
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
 CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti
