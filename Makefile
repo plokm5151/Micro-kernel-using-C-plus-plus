@@ -12,9 +12,11 @@ OBJS := \
   build/vectors.o \
   build/uart_pl011.o \
   build/gicv3.o \
+  build/cpu_local.o \
   build/barrier.o \
   build/timer.o \
   build/irq.o \
+  build/kmem.o \
   build/kmain.o
 
 ELF := build/kernel.elf
@@ -37,11 +39,19 @@ build/gicv3.o: src/arch/aarch64/gicv3.cc include/arch/gicv3.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
+build/cpu_local.o: src/arch/aarch64/cpu_local.cc include/arch/cpu_local.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
 build/timer.o: src/arch/aarch64/timer.cc include/arch/timer.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/irq.o: src/irq.cc include/irq.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/kmem.o: src/kmem.cc include/kmem.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
