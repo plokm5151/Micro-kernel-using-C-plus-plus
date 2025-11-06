@@ -9,6 +9,11 @@ extern "C" void cpu_local_boot_init() {
   static struct cpu_local cpu0;
   extern char __irq_stack_cpu0_top[];
   cpu0.irq_stack_top = (uintptr_t)__irq_stack_cpu0_top;
+  cpu0.current_thread = nullptr;
+  cpu0.preempt_cnt = 0;
+  cpu0.need_resched = 0;
+  cpu0.ticks = 0;
+  cpu0.irq_depth = 0;
   uintptr_t p = (uintptr_t)&cpu0;
   asm volatile("msr tpidr_el1, %0" :: "r"(p));
   asm volatile("isb");

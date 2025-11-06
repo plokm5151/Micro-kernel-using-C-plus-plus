@@ -1,6 +1,6 @@
-CXX     := clang++
-CC      := clang
-LD      := ld.lld
+CXX     := clang++-20
+CC      := clang-20
+LD      := ld.lld-20
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
 CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti
@@ -12,11 +12,14 @@ OBJS := \
   build/vectors.o \
   build/uart_pl011.o \
   build/gicv3.o \
+  build/ctx.o \
   build/cpu_local.o \
   build/barrier.o \
   build/timer.o \
   build/irq.o \
   build/kmem.o \
+  build/thread.o \
+  build/preempt.o \
   build/kmain.o
 
 ELF := build/kernel.elf
@@ -43,6 +46,10 @@ build/cpu_local.o: src/arch/aarch64/cpu_local.cc include/arch/cpu_local.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
+build/ctx.o: src/arch/aarch64/ctx.S include/arch/ctx.h
+	mkdir -p build
+	$(CC) $(ASFLAGS) -c $< -o $@
+
 build/timer.o: src/arch/aarch64/timer.cc include/arch/timer.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
@@ -52,6 +59,14 @@ build/irq.o: src/irq.cc include/irq.h
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/kmem.o: src/kmem.cc include/kmem.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/thread.o: src/thread.cc include/thread.h include/arch/ctx.h include/arch/cpu_local.h include/kmem.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/preempt.o: src/preempt.cc include/preempt.h include/arch/cpu_local.h include/thread.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 

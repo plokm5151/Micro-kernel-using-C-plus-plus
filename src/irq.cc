@@ -4,6 +4,8 @@
 #include "arch/gicv3.h"
 #include "arch/irq.h"
 #include "arch/timer.h"
+#include "preempt.h"
+#include "thread.h"
 
 namespace {
 
@@ -25,14 +27,23 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
                                   frame->regs[4], frame->regs[5],
                                   frame->regs[6], frame->regs[7]);
 
+  auto* cpu = cpu_local();
+  cpu->irq_depth++;
+
   uint32_t iar = gic_ack();
   uint32_t intid = iar & 0xFFFFFFu;
   if (intid == 27u) {           // virtual timer PPI
     timer_irq();
+    cpu->ticks++;
+    sched_on_tick();
+    if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
+      frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
+    }
   } else {
     uart_puts("IRQ?\n");
   }
   gic_eoi(iar);
+  cpu->irq_depth--;
 
   irq_counter++;
   if ((irq_counter & 0xFFu) == 0u) {

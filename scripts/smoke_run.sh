@@ -42,6 +42,7 @@ fi
 required_messages=(
   "[BOOT] UART ready"
   "Timer IRQ armed @1kHz"
+  "[sched] starting (coop)"
 )
 
 for message in "${required_messages[@]}"; do
@@ -52,3 +53,32 @@ for message in "${required_messages[@]}"; do
 done
 
 echo "[smoke] All expected boot messages found."
+
+patterns=(
+  "Aa"
+  "Bb"
+)
+
+for pattern in "${patterns[@]}"; do
+  if ! grep -qF "${pattern}" "${LOG_PATH}"; then
+    echo "::error ::Missing expected scheduler output: ${pattern}"
+    exit 1
+  fi
+done
+
+if ! grep -qF "." "${LOG_PATH}"; then
+  echo "::error ::Missing timer heartbeat '.'"
+  exit 1
+fi
+
+if ! grep -qE "ab|ba" "${LOG_PATH}"; then
+  echo "::error ::Missing evidence of RR preemption interleaving a/b"
+  exit 1
+fi
+
+if ! grep -qE "a[^b]*a" "${LOG_PATH}"; then
+  echo "::error ::Missing critical section block of a without b"
+  exit 1
+fi
+
+echo "[smoke] Scheduler output verified."
