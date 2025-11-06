@@ -12,8 +12,12 @@ struct alignas(64) cpu_local {
   unsigned long ticks;       // timer tick counter
   unsigned  irq_depth;       // nesting depth of active IRQ handlers
 } __attribute__((aligned(64)));
-
-static_assert(offsetof(cpu_local, irq_stack_top) == 0, "irq_stack_top must be at offset 0");
+#ifdef __cplusplus
+static_assert(offsetof(struct cpu_local, irq_stack_top) == 0,
+              "cpu_local.irq_stack_top at offset 0");
+static_assert(sizeof(struct cpu_local) % 64 == 0,
+              "cpu_local aligned to 64B");
+#endif
 #ifdef __cplusplus
 extern "C" {
 #endif
