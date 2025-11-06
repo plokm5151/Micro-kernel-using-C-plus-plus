@@ -12,6 +12,7 @@ OBJS := \
   build/vectors.o \
   build/uart_pl011.o \
   build/gicv3.o \
+  build/barrier.o \
   build/timer.o \
   build/irq.o \
   build/kmain.o
@@ -45,6 +46,10 @@ build/irq.o: src/irq.cc include/irq.h
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/kmain.o: src/kmain.cc
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/barrier.o: src/arch/aarch64/barrier.cc include/arch/barrier.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
