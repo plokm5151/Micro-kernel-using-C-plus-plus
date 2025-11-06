@@ -71,7 +71,7 @@ irq_el1:
   mrs x19, tpidr_el1
   cbz x19, 1f
   // cpu_local.irq_stack_top is at offset 0; keep in sync with struct cpu_local
-  // in include/arch/cpu_local.h (consider adding a static_assert in C).
+  // in include/arch/cpu_local.h (validated via static_assert in C).
   ldr x20, [x19, #0]
   mov x21, sp
   mov sp, x20
