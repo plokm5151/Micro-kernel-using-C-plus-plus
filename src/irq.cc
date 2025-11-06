@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "drivers/uart_pl011.h"
+#include "arch/cpu_local.h"
 #include "arch/gicv3.h"
 #include "arch/irq.h"
 #include "arch/timer.h"
@@ -18,6 +19,7 @@ volatile uint64_t high_arg_sink;
 }  // namespace
 
 extern "C" void irq_handler_el1(struct irq_frame* frame) {
+  static uint32_t irq_counter;
   high_arg_sink = touch_high_args(frame->regs[0], frame->regs[1],
                                   frame->regs[2], frame->regs[3],
                                   frame->regs[4], frame->regs[5],
@@ -31,4 +33,12 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
     uart_puts("IRQ?\n");
   }
   gic_eoi(iar);
+
+  irq_counter++;
+  if ((irq_counter & 0xFFu) == 0u) {
+    struct cpu_local* local = cpu_local();
+    uintptr_t delta = (uintptr_t)local->irq_stack_top - frame->sp;
+    uart_puts("[irq] delta=");
+    uart_print_u64(delta);
+  }
 }

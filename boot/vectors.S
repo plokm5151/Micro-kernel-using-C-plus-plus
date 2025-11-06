@@ -68,7 +68,19 @@ __vec_base:
   .global irq_el1
 irq_el1:
   msr daifset, #0b0010
+  mrs x19, tpidr_el1
+  cbz x19, 1f
+  // cpu_local.irq_stack_top is at offset 0; keep in sync with struct cpu_local
+  // in include/arch/cpu_local.h (consider adding a static_assert in C).
+  ldr x20, [x19, #0]
+  mov x21, sp
+  mov sp, x20
   sub sp, sp, #IRQ_FRAME_SIZE
+  b 2f
+1:
+  sub sp, sp, #IRQ_FRAME_SIZE
+  add x21, sp, #IRQ_FRAME_SIZE
+2:
   stp x0, x1, [sp, #IRQ_FRAME_X0]
   stp x2, x3, [sp, #IRQ_FRAME_X2]
   stp x4, x5, [sp, #IRQ_FRAME_X4]
@@ -80,8 +92,7 @@ irq_el1:
   stp x16, x17, [sp, #IRQ_FRAME_X16]
   str x18, [sp, #IRQ_FRAME_X18]
   str x30, [sp, #IRQ_FRAME_LR]
-  add x18, sp, #IRQ_FRAME_SIZE
-  str x18, [sp, #IRQ_FRAME_SP]
+  str x21, [sp, #IRQ_FRAME_SP]
   mrs x18, spsr_el1
   str x18, [sp, #IRQ_FRAME_SPSR]
   mrs x18, elr_el1
