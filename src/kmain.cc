@@ -68,11 +68,10 @@ extern "C" void kmain() {
   uart_puts("[diag] timer_init_hz\n");
   timer_init_hz(1000); // 1 kHz
 
-  uart_puts("[sched] starting (coop)\n");
   asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
   asm volatile("isb");
-
   uart_puts("[diag] IRQ enabled\n");
+  uart_puts("[sched] starting (coop)\n");
 
   constexpr size_t k_dma_test_len = 4096;
   g_dma_len = k_dma_test_len;
