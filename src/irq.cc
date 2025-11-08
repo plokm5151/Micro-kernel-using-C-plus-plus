@@ -19,7 +19,17 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
 
   switch (intid) {
     case 27u:  // virtual timer
+      uart_putc('V');
+      timer_irq();
+      cpu->ticks++;
+      sched_on_tick();
+      dma_poll_complete();
+      if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
+        frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
+      }
+      break;
     case 30u:  // physical timer
+      uart_putc('P');
       timer_irq();
       cpu->ticks++;
       sched_on_tick();

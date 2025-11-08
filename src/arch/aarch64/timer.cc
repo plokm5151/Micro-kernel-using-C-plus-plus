@@ -22,6 +22,12 @@ static inline void write_timer_ctl(uint64_t value) {
   asm volatile("msr cntp_ctl_el0, %0" :: "r"(value));
   asm volatile("isb");
 }
+
+static inline uint64_t read_timer_ctl() {
+  uint64_t value = 0;
+  asm volatile("mrs %0, cntp_ctl_el0" : "=r"(value));
+  return value;
+}
 #else
 static inline void write_timer_tval(uint64_t value) {
   asm volatile("msr cntv_tval_el0, %0" :: "r"(value));
@@ -30,6 +36,12 @@ static inline void write_timer_tval(uint64_t value) {
 static inline void write_timer_ctl(uint64_t value) {
   asm volatile("msr cntv_ctl_el0, %0" :: "r"(value));
   asm volatile("isb");
+}
+
+static inline uint64_t read_timer_ctl() {
+  uint64_t value = 0;
+  asm volatile("mrs %0, cntv_ctl_el0" : "=r"(value));
+  return value;
 }
 #endif
 
@@ -46,6 +58,13 @@ void timer_init_hz(uint32_t hz) {
   write_timer_ctl(0);        // disable & unmask
   write_timer_tval(ticks);   // program next expiry
   write_timer_ctl(1);        // ENABLE=1, IMASK=0
+
+#if USE_CNTP
+  uint64_t ctl = read_timer_ctl();
+  if ((ctl & 1u) == 0u) {
+    uart_puts("[timer] cntp_ctl not enabled?\n");
+  }
+#endif
 
   if (hz == 1000u) {
     uart_puts("Timer IRQ armed @1kHz\n");
