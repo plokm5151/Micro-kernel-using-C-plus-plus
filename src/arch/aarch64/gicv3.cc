@@ -50,17 +50,7 @@ void gic_init() {
   asm volatile("msr ICC_IGRPEN1_EL1, %0" :: "r"(1ull));// enable Group1
   asm volatile("isb");
 
-  uint64_t pmr = 0;
-  uint64_t grp1 = 0;
-  asm volatile("mrs %0, ICC_PMR_EL1" : "=r"(pmr));
-  asm volatile("mrs %0, ICC_IGRPEN1_EL1" : "=r"(grp1));
-  const char hex_digits[] = "0123456789abcdef";
-  char line[] = "[gic] init done (pmr=00 grp1=00)\n";
-  line[21] = hex_digits[(pmr >> 4) & 0xF];
-  line[22] = hex_digits[pmr & 0xF];
-  line[29] = hex_digits[(grp1 >> 4) & 0xF];
-  line[30] = hex_digits[grp1 & 0xF];
-  uart_puts(line);
+  uart_puts("[gic] init done\n");
 }
 
 uint32_t gic_ack() {
