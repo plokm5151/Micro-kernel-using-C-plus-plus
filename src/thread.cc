@@ -36,11 +36,13 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   Thread* t = reinterpret_cast<Thread*>(
       kmem_alloc_aligned(sizeof(Thread), alignof(Thread)));
   if (!t) {
+    uart_puts("[sched][err] no memory for Thread struct\n");
     return nullptr;
   }
 
   void* stack = kmem_alloc_aligned(stack_size, 16);
   if (!stack) {
+    uart_puts("[sched][err] no memory for thread stack\n");
     return nullptr;
   }
 
@@ -68,6 +70,14 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   t->stack_base = stack;
   t->stack_size = stack_size;
   t->budget = RR_QUANTUM_TICKS;
+
+  uart_puts("[sched][diag] thread created id=");
+  uart_print_u64(static_cast<unsigned long long>(t->id));
+  uart_puts(" sp=");
+  uart_print_u64(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(t->sp)));
+  uart_puts(" stack=");
+  uart_print_u64(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(t->stack_base)));
+  uart_puts("\n");
   return t;
 }
 
