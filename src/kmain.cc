@@ -12,6 +12,43 @@
 #ifndef TEST_SGI_ON_BOOT
 #define TEST_SGI_ON_BOOT 1
 #endif
+#ifndef ARM_TIMER_DIAG
+#define ARM_TIMER_DIAG 1
+#endif
+
+namespace {
+constexpr char kHexDigits[] = "0123456789abcdef";
+
+void uart_puthex64(uint64_t value) {
+  if (value == 0) {
+    uart_putc('0');
+    return;
+  }
+  char buf[16];
+  int idx = 0;
+  while (value != 0 && idx < 16) {
+    buf[idx++] = kHexDigits[value & 0xFu];
+    value >>= 4;
+  }
+  while (idx--) {
+    uart_putc(buf[idx]);
+  }
+}
+
+#if ARM_TIMER_DIAG
+bool g_probe_once = false;
+inline uint64_t read_cntp_ctl_diag() {
+  uint64_t v = 0;
+  asm volatile("mrs %0, cntp_ctl_el0" : "=r"(v));
+  return v;
+}
+inline uint64_t read_cntv_ctl_diag() {
+  uint64_t v = 0;
+  asm volatile("mrs %0, cntv_ctl_el0" : "=r"(v));
+  return v;
+}
+#endif
+}  // namespace
 
 static uint8_t* g_dma_src_buf = nullptr;
 static uint8_t* g_dma_dst_buf = nullptr;
@@ -85,6 +122,22 @@ extern "C" void kmain() {
     sgi |= (target_list & 0xFFFFu);
     asm volatile("msr ICC_SGI1R_EL1, %0" :: "r"(sgi) : "memory");
     asm volatile("isb");
+  }
+#endif
+
+#if ARM_TIMER_DIAG
+  if (!g_probe_once) {
+    g_probe_once = true;
+    for (volatile int i = 0; i < 10000; ++i) {
+      asm volatile("" ::: "memory");
+    }
+    const uint64_t cntp_ctl = read_cntp_ctl_diag();
+    const uint64_t cntv_ctl = read_cntv_ctl_diag();
+    uart_puts("[probe] cntp_ctl=0x");
+    uart_puthex64(cntp_ctl);
+    uart_puts(" cntv_ctl=0x");
+    uart_puthex64(cntv_ctl);
+    uart_puts("\n");
   }
 #endif
 

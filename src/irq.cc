@@ -8,6 +8,10 @@
 #include "thread.h"
 #include "dma.h"
 
+namespace {
+unsigned g_irq_diag_count = 0;
+}
+
 extern "C" void irq_handler_el1(struct irq_frame* frame) {
   uart_putc('!');
 
@@ -16,6 +20,13 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
 
   uint32_t iar = gic_ack();
   uint32_t intid = iar & 0x3FFu;
+
+  if (g_irq_diag_count < 8u) {
+    uart_puts("[irq] intid=");
+    uart_print_u64(intid);
+    uart_puts("\n");
+    ++g_irq_diag_count;
+  }
 
   switch (intid) {
     case 27u:  // virtual timer
