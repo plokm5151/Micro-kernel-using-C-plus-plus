@@ -47,9 +47,9 @@ void timer_irq() {
   }
   write_cntv_tval(ticks);
 
-  uart_puts(".");
+  uart_putc('.');
   heartbeat++;
   if ((heartbeat & 63u) == 0u) {
-    uart_puts("\n");
+    uart_putc('\n');
   }
 }

@@ -66,30 +66,28 @@ for message in "${required_messages[@]}"; do
 done
 echo "[smoke] Boot messages OK."
 
-# RR/搶佔輸出
+# IRQ 信標與心跳檢查
 flat_log=$(tr -d $'\n' < "${LOG_PATH}")
+if ! grep -qF '!' "${LOG_PATH}"; then
+  echo "::error ::No IRQ entries seen ('!'): check GIC init or msr daifclr,#2"
+  exit 1
+fi
+if ! grep -qF ':' "${LOG_PATH}"; then
+  echo "::error ::IRQ seen but not timer PPI #27 (':') — wrong INTID or timer not enabled"
+  exit 1
+fi
+if ! printf '%s' "${flat_log}" | grep -q '\.'; then
+  echo "::error ::Timer PPI #27 reached but heartbeat '.' missing — check timer_irq() reload/printing"
+  exit 1
+fi
+
+# RR/搶佔輸出
 if ! printf '%s' "${flat_log}" | grep -q 'A.*a'; then
   echo "::error ::Missing expected scheduler evidence: A then a (interleaving allowed)"
   exit 1
 fi
 if ! printf '%s' "${flat_log}" | grep -q 'B.*b'; then
   echo "::error ::Missing expected scheduler evidence: B then b (interleaving allowed)"
-  exit 1
-fi
-if ! printf '%s' "${flat_log}" | grep -q '\.'; then
-  if grep -qF '!' "${LOG_PATH}" || grep -qF ':' "${LOG_PATH}"; then
-    echo "::error ::Timer heartbeat '.' missing despite IRQ beacons (!/:)"
-  else
-    echo "::error ::No IRQ activity detected (missing '!' and ':' beacons)"
-  fi
-  exit 1
-fi
-if ! grep -qF '!' "${LOG_PATH}"; then
-  echo "::error ::Missing IRQ entry beacon '!'"
-  exit 1
-fi
-if ! grep -qF ':' "${LOG_PATH}"; then
-  echo "::error ::Missing timer IRQ beacon ':'"
   exit 1
 fi
 if ! grep -qE "ab|ba" "${LOG_PATH}"; then

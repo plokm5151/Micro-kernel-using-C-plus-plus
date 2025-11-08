@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include "arch/gicv3.h"
+#include "drivers/uart_pl011.h"
 
 static inline void enable_sre_el1() {
   uint64_t v = 0;
@@ -41,6 +42,18 @@ void gic_init() {
   asm volatile("msr ICC_BPR1_EL1, %0" :: "r"(0ull));   // no binning
   asm volatile("msr ICC_IGRPEN1_EL1, %0" :: "r"(1ull));// enable Group1
   asm volatile("isb");
+
+  uint64_t pmr = 0;
+  uint64_t grp1 = 0;
+  asm volatile("mrs %0, ICC_PMR_EL1" : "=r"(pmr));
+  asm volatile("mrs %0, ICC_IGRPEN1_EL1" : "=r"(grp1));
+  const char hex_digits[] = "0123456789abcdef";
+  char line[] = "[gic] pmr=00 grp1=00\n";
+  line[11] = hex_digits[(pmr >> 4) & 0xF];
+  line[12] = hex_digits[pmr & 0xF];
+  line[19] = hex_digits[(grp1 >> 4) & 0xF];
+  line[20] = hex_digits[grp1 & 0xF];
+  uart_puts(line);
 }
 
 uint32_t gic_ack() {
