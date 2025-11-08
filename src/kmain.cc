@@ -9,6 +9,10 @@
 #include "preempt.h"
 #include "dma.h"
 
+#ifndef TEST_SGI_ON_BOOT
+#define TEST_SGI_ON_BOOT 1
+#endif
+
 static uint8_t* g_dma_src_buf = nullptr;
 static uint8_t* g_dma_dst_buf = nullptr;
 static size_t g_dma_len = 0;
@@ -71,6 +75,19 @@ extern "C" void kmain() {
   asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
   asm volatile("isb");
   uart_puts("[diag] IRQ enabled\n");
+
+#if TEST_SGI_ON_BOOT
+  {
+    uint64_t sgi = 0;
+    const uint64_t intid = 1ull;       // SGI #1
+    const uint64_t target_list = 1ull; // current CPU (bit0)
+    sgi |= (intid & 0xFu) << 24;
+    sgi |= (target_list & 0xFFFFu);
+    asm volatile("msr ICC_SGI1R_EL1, %0" :: "r"(sgi) : "memory");
+    asm volatile("isb");
+  }
+#endif
+
   uart_puts("[sched] starting (coop)\n");
 
   constexpr size_t k_dma_test_len = 4096;

@@ -10,20 +10,17 @@ static inline void enable_sre_el1() {
   asm volatile("isb");
 }
 
-static inline void gicr_wake_best_effort() {
-  // Attempt to clear ProcessorSleep and allow a bounded wait for ChildrenAsleep
-  uint32_t w = mmio_r32(GICR_BASE + 0x0014);
-  w &= ~(1u << 1);  // ProcessorSleep = 0
+static inline void gicr_wake() {
+  uint32_t w = mmio_r32(GICR_BASE + 0x0014);  // GICR_WAKER
+  w &= ~(1u << 1);                            // ProcessorSleep = 0
   mmio_w32(GICR_BASE + 0x0014, w);
-  for (int i = 0; i < 1000; ++i) {
-    if ((mmio_r32(GICR_BASE + 0x0014) & (1u << 2)) == 0) {
-      break;
-    }
+  while (mmio_r32(GICR_BASE + 0x0014) & (1u << 2)) {
+    // Wait until ChildrenAsleep is cleared, guaranteeing the redistributor is awake
   }
 }
 
 void gic_init() {
-  gicr_wake_best_effort();
+  gicr_wake();
 
   // ---- SGI/PPI registers are in the SGI_base frame (GICR_BASE + 0x10000) ----
   // Group all PPIs to Non-secure Group1
@@ -33,7 +30,7 @@ void gic_init() {
   // Level-triggered for PPIs: GICR_ICFGR1 (INTIDs 16..31)
   mmio_w32(GICR_SGI_BASE + 0x00C4, 0x00000000u);
 
-  // Enable physical timer PPI #30 (and keep virtual #27 enabled for safety)
+  // Enable virtual timer PPI #27 and physical timer PPI #30
   mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 30) | (1u << 27)); // GICR_ISENABLER0
 
   // Priority for INTIDs 27/30 (one byte per INTID from 0..31)

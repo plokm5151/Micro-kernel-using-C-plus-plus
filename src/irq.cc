@@ -17,20 +17,27 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   uint32_t iar = gic_ack();
   uint32_t intid = iar & 0x3FFu;
 
-  if (intid == 30u) {           // physical timer PPI (CNTP)
-    uart_putc(':');
-    timer_irq();
-    cpu->ticks++;
-    sched_on_tick();
-    dma_poll_complete();
-    if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
-      frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
-    }
-  } else if (intid == 1023u) {
-    cpu->irq_depth--;
-    return;
-  } else {
-    uart_putc('?');
+  switch (intid) {
+    case 27u:  // virtual timer
+    case 30u:  // physical timer
+      timer_irq();
+      cpu->ticks++;
+      sched_on_tick();
+      dma_poll_complete();
+      if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
+        frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
+      }
+      break;
+    case 1023u:  // spurious
+      cpu->irq_depth--;
+      return;
+    default:
+      if (intid < 16u) {
+        uart_putc('^');
+      } else {
+        uart_puts("[irq] unexpected intid\n");
+      }
+      break;
   }
 
   if (intid != 1023u) {
