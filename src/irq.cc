@@ -6,6 +6,7 @@
 #include "arch/timer.h"
 #include "preempt.h"
 #include "thread.h"
+#include "dma.h"
 
 extern "C" void irq_handler_el1(struct irq_frame* frame) {
   auto* cpu = cpu_local();
@@ -16,6 +17,7 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   if (intid == 27u) {           // virtual timer PPI
     timer_irq();
     cpu->ticks++;
+    dma_poll_complete();
     sched_on_tick();
     if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
       frame->elr = reinterpret_cast<uint64_t>(&preempt_return);

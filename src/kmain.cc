@@ -7,9 +7,34 @@
 #include "kmem.h"
 #include "thread.h"
 #include "preempt.h"
+#include "dma.h"
+
+static uint8_t* g_dma_src_buf = nullptr;
+static uint8_t* g_dma_dst_buf = nullptr;
+static size_t g_dma_len = 0;
 
 void a(void*);
 void b(void*);
+
+static void dma_test_cb(void* user, int status) {
+  (void)user;
+  if (status != 0 || !g_dma_dst_buf || !g_dma_src_buf) {
+    uart_puts("[DMA FAIL]\n");
+    return;
+  }
+  bool ok = true;
+  for (size_t i = 0; i < g_dma_len; ++i) {
+    if (g_dma_dst_buf[i] != g_dma_src_buf[i]) {
+      ok = false;
+      break;
+    }
+  }
+  if (ok) {
+    uart_puts("[DMA OK]\n");
+  } else {
+    uart_puts("[DMA FAIL]\n");
+  }
+}
 
 extern "C" void kmain() {
   uart_init();
@@ -22,6 +47,24 @@ extern "C" void kmain() {
   uart_puts("[diag] kmem_init begin\n");
   kmem_init();
   uart_puts("[diag] kmem_init end\n");
+
+  constexpr size_t k_dma_test_len = 4096;
+  g_dma_len = k_dma_test_len;
+  g_dma_src_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+  g_dma_dst_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+  if (!g_dma_src_buf || !g_dma_dst_buf) {
+    uart_puts("[DMA] buffer allocation failed\n");
+  } else {
+    for (size_t i = 0; i < k_dma_test_len; ++i) {
+      g_dma_src_buf[i] = static_cast<uint8_t>((i * 7u) & 0xFFu);
+      g_dma_dst_buf[i] = 0u;
+    }
+    int submit = dma_submit_memcpy(g_dma_dst_buf, g_dma_src_buf, k_dma_test_len,
+                                   dma_test_cb, nullptr);
+    if (submit != 0) {
+      uart_puts("[DMA] submit failed\n");
+    }
+  }
 
   uart_puts("[diag] sched_init\n");
   sched_init();
