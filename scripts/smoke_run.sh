@@ -13,6 +13,12 @@ cd "${REPO_ROOT}"
 BUILD_DIR="${REPO_ROOT}/build"
 LOG_PATH="${BUILD_DIR}/qemu-smoke.log"
 
+echo "[smoke] Building kernel (make -j)..."
+if ! make -j; then
+  echo "::error ::Kernel build failed; see make output above"
+  exit 1
+fi
+
 mkdir -p "${BUILD_DIR}"
 : >"${LOG_PATH}"
 
