@@ -4,9 +4,30 @@
 #include <stdint.h>
 #include "arch/barrier.h"
 #include "arch/irqflags.h"
+#include "drivers/uart_pl011.h"
 
 extern "C" char __dma_nc_start[];
 extern "C" char __dma_nc_end[];
+
+namespace {
+constexpr char kHexDigits[] = "0123456789abcdef";
+
+void uart_puthex64(uint64_t value) {
+  if (value == 0) {
+    uart_putc('0');
+    return;
+  }
+  char buf[16];
+  int idx = 0;
+  while (value != 0 && idx < 16) {
+    buf[idx++] = kHexDigits[value & 0xFu];
+    value >>= 4;
+  }
+  while (idx--) {
+    uart_putc(buf[idx]);
+  }
+}
+}  // namespace
 
 struct dma_desc {
   volatile uint64_t src;
@@ -72,6 +93,16 @@ extern "C" int dma_submit_memcpy(void* dst, const void* src, size_t len,
 
   dmb_ish();
   dc_civac_range(desc, sizeof(*desc));
+
+  uart_puts("[DMA] queued desc=0x");
+  uart_puthex64(reinterpret_cast<uint64_t>(desc));
+  uart_puts(" src=0x");
+  uart_puthex64(desc->src);
+  uart_puts(" dst=0x");
+  uart_puthex64(desc->dst);
+  uart_puts(" len=");
+  uart_print_u64(len);
+  uart_puts("\n");
   return 0;
 }
 
@@ -88,6 +119,14 @@ extern "C" void dma_poll_complete(void) {
     const void* src = reinterpret_cast<const void*>(static_cast<uintptr_t>(desc->src));
     size_t len = static_cast<size_t>(desc->len);
 
+    uart_puts("[DMA] poll: copy len=");
+    uart_print_u64(len);
+    uart_puts(" src=0x");
+    uart_puthex64(desc->src);
+    uart_puts(" dst=0x");
+    uart_puthex64(desc->dst);
+    uart_puts("\n");
+
     if (len) {
       dma_memcpy(dst, src, len);
       dmb_ish();
@@ -100,6 +139,7 @@ extern "C" void dma_poll_complete(void) {
     dmb_ish();
     dc_civac_range(desc, sizeof(*desc));
 
+    uart_puts("[DMA] done\n");
     if (desc->cb) {
       desc->cb(desc->user, 0);
     }

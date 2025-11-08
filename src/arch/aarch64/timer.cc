@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifndef USE_CNTP
-#define USE_CNTP 1
+#define USE_CNTP 0
 #endif
 #ifndef ARM_TIMER_DIAG
 #define ARM_TIMER_DIAG 1
@@ -41,6 +41,7 @@ inline uint64_t read_daif() {
   return value;
 }
 
+#if USE_CNTP
 inline void write_cntp_tval(uint64_t value) {
   asm volatile("msr cntp_tval_el0, %0" :: "r"(value));
 }
@@ -55,6 +56,7 @@ inline uint64_t read_cntp_ctl() {
   asm volatile("mrs %0, cntp_ctl_el0" : "=r"(value));
   return value;
 }
+#endif
 
 inline void write_cntv_tval(uint64_t value) {
   asm volatile("msr cntv_tval_el0, %0" :: "r"(value));

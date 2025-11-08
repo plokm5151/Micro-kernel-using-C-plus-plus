@@ -161,6 +161,9 @@ extern "C" void kmain() {
                                    dma_test_cb, nullptr);
     if (submit != 0) {
       uart_puts("[DMA] submit failed\n");
+    } else {
+      uart_puts("[DMA] submit ok\n");
+      dma_poll_complete();
     }
   }
 
