@@ -17,7 +17,7 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   uint32_t iar = gic_ack();
   uint32_t intid = iar & 0x3FFu;
 
-  if (intid == 27u) {           // virtual timer PPI
+  if (intid == 30u) {           // physical timer PPI (CNTP)
     uart_putc(':');
     timer_irq();
     cpu->ticks++;

@@ -9,12 +9,12 @@ static inline uint64_t read_cntfrq() {
   return value;
 }
 
-static inline void write_cntv_tval(uint64_t value) {
-  asm volatile("msr cntv_tval_el0, %0" :: "r"(value));
+static inline void write_cntp_tval(uint64_t value) {
+  asm volatile("msr cntp_tval_el0, %0" :: "r"(value));
 }
 
-static inline void write_cntv_ctl(uint64_t value) {
-  asm volatile("msr cntv_ctl_el0, %0" :: "r"(value));
+static inline void write_cntp_ctl(uint64_t value) {
+  asm volatile("msr cntp_ctl_el0, %0" :: "r"(value));
   asm volatile("isb");
 }
 
@@ -28,9 +28,9 @@ void timer_init_hz(uint32_t hz) {
     ticks = 1;  // ensure timer fires
   }
 
-  write_cntv_ctl(0);        // disable & unmask
-  write_cntv_tval(ticks);   // program next expiry
-  write_cntv_ctl(1);        // ENABLE=1, IMASK=0
+  write_cntp_ctl(0);        // disable & unmask
+  write_cntp_tval(ticks);   // program next expiry
+  write_cntp_ctl(1);        // ENABLE=1, IMASK=0
   asm volatile("isb");
 
   if (hz == 1000u) {
@@ -46,7 +46,7 @@ void timer_irq() {
   if (ticks == 0) {
     ticks = 1;
   }
-  write_cntv_tval(ticks);
+  write_cntp_tval(ticks);
 
   uart_putc('.');
   heartbeat++;

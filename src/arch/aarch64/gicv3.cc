@@ -33,12 +33,13 @@ void gic_init() {
   // Level-triggered for PPIs: GICR_ICFGR1 (INTIDs 16..31)
   mmio_w32(GICR_SGI_BASE + 0x00C4, 0x00000000u);
 
-  // Enable Virtual Timer PPI #27
-  mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 27)); // GICR_ISENABLER0
+  // Enable physical timer PPI #30 (and keep virtual #27 enabled for safety)
+  mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 30) | (1u << 27)); // GICR_ISENABLER0
 
-  // Priority for INTID 27 (one byte per INTID from 0..31)
+  // Priority for INTIDs 27/30 (one byte per INTID from 0..31)
   volatile uint8_t* prio = (volatile uint8_t*)(GICR_SGI_BASE + 0x0400);
   prio[27] = 0x80;
+  prio[30] = 0x80;
 
   // Distributor: enable Group1NS
   mmio_w32(GICD_BASE + 0x0000, (1u << 1)); // GICD_CTLR.EnableGrp1NS
