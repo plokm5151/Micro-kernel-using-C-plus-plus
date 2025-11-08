@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #ifndef USE_CNTP
-#define USE_CNTP 0
+#define USE_CNTP 1
 #endif
 
 static inline uint64_t read_cntfrq() {
