@@ -21,8 +21,8 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
     uart_putc(':');
     timer_irq();
     cpu->ticks++;
-    dma_poll_complete();
     sched_on_tick();
+    dma_poll_complete();
     if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
       frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
     }
