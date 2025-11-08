@@ -10,10 +10,15 @@
 
 namespace {
 unsigned g_irq_diag_count = 0;
+unsigned g_irq_entry_budget = 8;
+unsigned g_irq_timer_budget = 8;
 }
 
 extern "C" void irq_handler_el1(struct irq_frame* frame) {
-  uart_putc('!');
+  if (g_irq_entry_budget != 0) {
+    uart_putc('!');
+    --g_irq_entry_budget;
+  }
 
   auto* cpu = cpu_local();
   cpu->irq_depth++;
@@ -30,7 +35,10 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
 
   switch (intid) {
     case 27u:  // virtual timer
-      uart_putc('V');
+      if (g_irq_timer_budget != 0) {
+        uart_putc('V');
+        --g_irq_timer_budget;
+      }
       timer_irq();
       cpu->ticks++;
       sched_on_tick();
@@ -40,7 +48,10 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
       }
       break;
     case 30u:  // physical timer
-      uart_putc('P');
+      if (g_irq_timer_budget != 0) {
+        uart_putc('P');
+        --g_irq_timer_budget;
+      }
       timer_irq();
       cpu->ticks++;
       sched_on_tick();

@@ -3,6 +3,7 @@
 #include "arch/cpu_local.h"
 #include "arch/gicv3.h"
 #include "arch/timer.h"
+#include "arch/irqflags.h"
 #include "arch/ctx.h"
 #include "kmem.h"
 #include "thread.h"
@@ -104,6 +105,8 @@ extern "C" void kmain() {
   uart_puts("[diag] sched_add b\n");
   sched_add(tb);
 
+  uart_puts("[sched] starting (coop)\n");
+
   uart_puts("[diag] gic_init\n");
   gic_init();
   uart_puts("[diag] timer_init_hz\n");
@@ -133,15 +136,15 @@ extern "C" void kmain() {
     }
     const uint64_t cntp_ctl = read_cntp_ctl_diag();
     const uint64_t cntv_ctl = read_cntv_ctl_diag();
+    unsigned long irq_flags = local_irq_save();
     uart_puts("[probe] cntp_ctl=0x");
     uart_puthex64(cntp_ctl);
     uart_puts(" cntv_ctl=0x");
     uart_puthex64(cntv_ctl);
     uart_puts("\n");
+    local_irq_restore(irq_flags);
   }
 #endif
-
-  uart_puts("[sched] starting (coop)\n");
 
   constexpr size_t k_dma_test_len = 4096;
   g_dma_len = k_dma_test_len;

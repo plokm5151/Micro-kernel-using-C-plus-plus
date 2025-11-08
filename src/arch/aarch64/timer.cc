@@ -138,23 +138,6 @@ void timer_init_hz(uint32_t hz) {
     if ((ctl & 1u) == 0u) {
       uart_puts("[timer] enable bit appears 0\n");
     }
-#if USE_CNTP
-    write_cntv_ctl(0);
-    write_cntv_tval(ticks);
-    write_cntv_ctl(1);
-    const uint64_t other_ctl = read_cntv_ctl();
-    uart_puts("[timer] also armed CNTV ctl=0x");
-    uart_puthex64(other_ctl);
-    uart_puts("\n");
-#else
-    write_cntp_ctl(0);
-    write_cntp_tval(ticks);
-    write_cntp_ctl(1);
-    const uint64_t other_ctl = read_cntp_ctl();
-    uart_puts("[timer] also armed CNTP ctl=0x");
-    uart_puthex64(other_ctl);
-    uart_puts("\n");
-#endif
   }
 #endif
 

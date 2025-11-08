@@ -78,8 +78,12 @@ void gic_init() {
   // Level-triggered for PPIs: GICR_ICFGR1 (INTIDs 16..31)
   mmio_w32(GICR_SGI_BASE + 0x00C4, 0x00000000u);
 
-  // Enable SGI #1 plus timer PPIs (#27 virtual, #30 physical)
-  mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 1) | (1u << 27) | (1u << 30));
+  // Enable SGI #1 plus the selected timer PPI
+#if USE_CNTP
+  mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 1) | (1u << 30));
+#else
+  mmio_w32(GICR_SGI_BASE + 0x0100, (1u << 1) | (1u << 27));
+#endif
 
   // Priority for INTIDs 1/27/30 (one byte per INTID from 0..31)
   volatile uint8_t* prio = (volatile uint8_t*)(GICR_SGI_BASE + 0x0400);
