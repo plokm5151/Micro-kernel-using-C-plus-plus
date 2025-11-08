@@ -36,7 +36,7 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   switch (intid) {
     case 27u:  // virtual timer
       if (g_irq_timer_budget != 0) {
-        uart_putc('V');
+        uart_putc(':');
         --g_irq_timer_budget;
       }
       timer_irq();

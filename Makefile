@@ -25,7 +25,7 @@ $(error Could not find any of the following linkers: $(LLD_CANDIDATES))
 endif
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
-CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1
+CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 -DUSE_CNTP=0
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T boot/kernel.ld
 
