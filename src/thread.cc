@@ -28,8 +28,19 @@ extern "C" void sched_init(void) {
   next_thread_id = 1;
 }
 
+#if defined(__GNUC__) && !defined(__clang__)
+#define THREAD_GENERAL_REGS_ONLY __attribute__((target("general-regs-only")))
+#else
+#define THREAD_GENERAL_REGS_ONLY
+#endif
+
+extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size)
+    THREAD_GENERAL_REGS_ONLY;
+
 extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size) {
+  uart_puts("[diag] thread_create enter\n");
   if (entry == nullptr || stack_size == 0) {
+    uart_puts("[sched][err] invalid thread params\n");
     return nullptr;
   }
 
@@ -40,10 +51,20 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
     return nullptr;
   }
 
+  volatile uint8_t* t_bytes = reinterpret_cast<volatile uint8_t*>(t);
+  for (size_t i = 0; i < sizeof(Thread); ++i) {
+    t_bytes[i] = 0;
+  }
+
   void* stack = kmem_alloc_aligned(stack_size, 16);
   if (!stack) {
     uart_puts("[sched][err] no memory for thread stack\n");
     return nullptr;
+  }
+
+  volatile uint8_t* stack_bytes = reinterpret_cast<volatile uint8_t*>(stack);
+  for (size_t i = 0; i < stack_size; ++i) {
+    stack_bytes[i] = 0;
   }
 
   uintptr_t stack_top = reinterpret_cast<uintptr_t>(stack) + stack_size;
@@ -78,6 +99,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   uart_puts(" stack=");
   uart_print_u64(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(t->stack_base)));
   uart_puts("\n");
+  uart_puts("[diag] thread_create exit\n");
   return t;
 }
 
@@ -165,3 +187,5 @@ extern "C" void sched_resched_from_irq_tail(void) {
   do_switch(cur, next);
   cpu->need_resched = 0;
 }
+
+#undef THREAD_GENERAL_REGS_ONLY

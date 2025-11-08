@@ -86,7 +86,7 @@ build/kmem.o: src/kmem.cc include/kmem.h
 
 build/thread.o: src/thread.cc include/thread.h include/arch/ctx.h include/arch/cpu_local.h include/kmem.h
 	mkdir -p build
-	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) -mgeneral-regs-only -Iinclude -Isrc -c $< -o $@
 
 build/preempt.o: src/preempt.cc include/preempt.h include/arch/cpu_local.h include/thread.h
 	mkdir -p build
