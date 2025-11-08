@@ -28,15 +28,6 @@ extern "C" void sched_init(void) {
   next_thread_id = 1;
 }
 
-#if defined(__GNUC__) && !defined(__clang__)
-#define THREAD_GENERAL_REGS_ONLY __attribute__((target("general-regs-only")))
-#else
-#define THREAD_GENERAL_REGS_ONLY
-#endif
-
-extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size)
-    THREAD_GENERAL_REGS_ONLY;
-
 extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size) {
   uart_puts("[diag] thread_create enter\n");
   if (entry == nullptr || stack_size == 0) {
@@ -188,4 +179,3 @@ extern "C" void sched_resched_from_irq_tail(void) {
   cpu->need_resched = 0;
 }
 
-#undef THREAD_GENERAL_REGS_ONLY

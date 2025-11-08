@@ -46,7 +46,6 @@ extern "C" void kmain() {
   asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
 
   uart_puts("[diag] IRQ enabled\n");
-  uart_puts("Timer IRQ armed @1kHz\n");
   uart_puts("[sched] starting (coop)\n");
   sched_start(); // 不返回
   while (1) { asm volatile("wfe"); }
