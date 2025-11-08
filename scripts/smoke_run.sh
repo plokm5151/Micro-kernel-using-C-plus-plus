@@ -67,14 +67,14 @@ done
 echo "[smoke] Boot messages OK."
 
 # RR/搶佔輸出
-patterns=( "Aa" "Bb" )
-for pattern in "${patterns[@]}"; do
-  if ! grep -qF "${pattern}" "${LOG_PATH}"; then
-    echo "::error ::Missing expected scheduler output: ${pattern}"
-    exit 1
-  fi
-
-done
+if ! tr -d "\n" < "${LOG_PATH}" | grep -q "A.*a"; then
+  echo "::error ::Missing expected scheduler evidence: A then a (interleaving allowed)"
+  exit 1
+fi
+if ! tr -d "\n" < "${LOG_PATH}" | grep -q "B.*b"; then
+  echo "::error ::Missing expected scheduler evidence: B then b (interleaving allowed)"
+  exit 1
+fi
 if ! grep -qF "." "${LOG_PATH}"; then
   echo "::error ::Missing timer heartbeat '.'"
   exit 1
