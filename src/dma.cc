@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "arch/barrier.h"
+#include "arch/irqflags.h"
 
 extern "C" char __dma_nc_start[];
 extern "C" char __dma_nc_end[];
@@ -60,12 +61,14 @@ extern "C" int dma_submit_memcpy(void* dst, const void* src, size_t len,
   desc->user = user;
   desc->next = nullptr;
 
+  unsigned long flags = local_irq_save();
   if (g_pending_tail) {
     g_pending_tail->next = desc;
   } else {
     g_pending_head = desc;
   }
   g_pending_tail = desc;
+  local_irq_restore(flags);
 
   dmb_ish();
   dc_civac_range(desc, sizeof(*desc));

@@ -2,6 +2,8 @@
   .global _start
   .extern kmain
   .extern __vec_base
+  .extern __bss_start
+  .extern __bss_end
 _start:
   ldr x0, =__boot_stack_top
   mov sp, x0
@@ -10,6 +12,16 @@ _start:
   msr VBAR_EL1, x1
   isb
 
+  ldr x1, =__bss_start
+  ldr x2, =__bss_end
+  cmp x1, x2
+  b.hs 2f
+1:
+  str xzr, [x1], #8
+  cmp x1, x2
+  b.lo 1b
+2:
+
   bl kmain
-1: wfe
-   b 1b
+3: wfe
+   b 3b

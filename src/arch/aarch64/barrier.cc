@@ -44,7 +44,7 @@ static void dc_ivac_line(uintptr_t addr) {
 static void dc_range_common(const void* p, size_t len, void (*op)(uintptr_t)) {
   dmb_ish();
 
-  if (len == 0) {
+  if (len == 0 || !dcache_enabled()) {
     dsb_ish();
     return;
   }
@@ -76,5 +76,11 @@ extern "C" void dc_civac_range(const void* p, size_t len) {
 
 extern "C" void dc_ivac_range(const void* p, size_t len) {
   dc_range_common(p, len, dc_ivac_line);
+}
+
+extern "C" int dcache_enabled(void) {
+  uint64_t sctlr = 0;
+  asm volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+  return (sctlr & (1u << 2)) != 0;
 }
 

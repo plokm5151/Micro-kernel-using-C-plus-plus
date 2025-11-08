@@ -35,6 +35,7 @@ static inline void dma_mb(void) {
 extern "C" {
 #endif
 
+int dcache_enabled(void);
 void dc_cvac_range(const void* p, size_t len);
 void dc_civac_range(const void* p, size_t len);
 void dc_ivac_range(const void* p, size_t len);
