@@ -67,16 +67,29 @@ done
 echo "[smoke] Boot messages OK."
 
 # RR/搶佔輸出
-if ! tr -d $'\n' < "${LOG_PATH}" | grep -q 'A.*a'; then
+flat_log=$(tr -d $'\n' < "${LOG_PATH}")
+if ! printf '%s' "${flat_log}" | grep -q 'A.*a'; then
   echo "::error ::Missing expected scheduler evidence: A then a (interleaving allowed)"
   exit 1
 fi
-if ! tr -d $'\n' < "${LOG_PATH}" | grep -q 'B.*b'; then
+if ! printf '%s' "${flat_log}" | grep -q 'B.*b'; then
   echo "::error ::Missing expected scheduler evidence: B then b (interleaving allowed)"
   exit 1
 fi
-if ! tr -d $'\n' < "${LOG_PATH}" | grep -q '[.]'; then
-  echo "::error ::Missing timer heartbeat '.'"
+if ! printf '%s' "${flat_log}" | grep -q '\.'; then
+  if grep -qF '!' "${LOG_PATH}" || grep -qF ':' "${LOG_PATH}"; then
+    echo "::error ::Timer heartbeat '.' missing despite IRQ beacons (!/:)"
+  else
+    echo "::error ::No IRQ activity detected (missing '!' and ':' beacons)"
+  fi
+  exit 1
+fi
+if ! grep -qF '!' "${LOG_PATH}"; then
+  echo "::error ::Missing IRQ entry beacon '!'"
+  exit 1
+fi
+if ! grep -qF ':' "${LOG_PATH}"; then
+  echo "::error ::Missing timer IRQ beacon ':'"
   exit 1
 fi
 if ! grep -qE "ab|ba" "${LOG_PATH}"; then

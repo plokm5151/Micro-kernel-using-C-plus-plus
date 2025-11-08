@@ -121,6 +121,7 @@ extern "C" void sched_start(void) {
   cpu_local()->current_thread = cur;
   void* boot_sp = nullptr;
   arch_switch(&boot_sp, cur->sp);
+  uart_puts("[BUG] returned to sched_start\n");
   while (1) {
     asm volatile("wfe");
   }
