@@ -38,11 +38,18 @@ void timer_init_hz(uint32_t hz) {
 }
 
 void timer_irq() {
+  static unsigned heartbeat = 0;
+
   uint64_t freq = read_cntfrq();
   uint64_t ticks = freq / 1000u;
   if (ticks == 0) {
     ticks = 1;
   }
   write_cntv_tval(ticks);
+
   uart_puts(".");
+  heartbeat++;
+  if ((heartbeat & 63u) == 0u) {
+    uart_puts("\n");
+  }
 }

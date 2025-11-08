@@ -67,15 +67,15 @@ done
 echo "[smoke] Boot messages OK."
 
 # RR/搶佔輸出
-if ! tr -d "\n" < "${LOG_PATH}" | grep -q "A.*a"; then
+if ! tr -d $'\n' < "${LOG_PATH}" | grep -q 'A.*a'; then
   echo "::error ::Missing expected scheduler evidence: A then a (interleaving allowed)"
   exit 1
 fi
-if ! tr -d "\n" < "${LOG_PATH}" | grep -q "B.*b"; then
+if ! tr -d $'\n' < "${LOG_PATH}" | grep -q 'B.*b'; then
   echo "::error ::Missing expected scheduler evidence: B then b (interleaving allowed)"
   exit 1
 fi
-if ! grep -qF "." "${LOG_PATH}"; then
+if ! tr -d $'\n' < "${LOG_PATH}" | grep -q '[.]'; then
   echo "::error ::Missing timer heartbeat '.'"
   exit 1
 fi
