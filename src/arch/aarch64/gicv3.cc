@@ -10,13 +10,20 @@ static inline void enable_sre_el1() {
   asm volatile("isb");
 }
 
+static inline void gicr_wake_best_effort() {
+  // Attempt to clear ProcessorSleep and allow a bounded wait for ChildrenAsleep
+  uint32_t w = mmio_r32(GICR_BASE + 0x0014);
+  w &= ~(1u << 1);  // ProcessorSleep = 0
+  mmio_w32(GICR_BASE + 0x0014, w);
+  for (int i = 0; i < 1000; ++i) {
+    if ((mmio_r32(GICR_BASE + 0x0014) & (1u << 2)) == 0) {
+      break;
+    }
+  }
+}
+
 void gic_init() {
-  // Optional: wake Redistributor (many QEMU setups are already awake)
-  // Clear ProcessorSleep bit in GICR_WAKER (offset 0x0014), wait ChildrenAsleep clear.
-  // uint32_t w = mmio_r32(GICR_BASE + 0x0014);
-  // w &= ~(1u << 1); // ProcessorSleep=0
-  // mmio_w32(GICR_BASE + 0x0014, w);
-  // while (mmio_r32(GICR_BASE + 0x0014) & (1u << 2)) { }
+  gicr_wake_best_effort();
 
   // ---- SGI/PPI registers are in the SGI_base frame (GICR_BASE + 0x10000) ----
   // Group all PPIs to Non-secure Group1
@@ -48,11 +55,11 @@ void gic_init() {
   asm volatile("mrs %0, ICC_PMR_EL1" : "=r"(pmr));
   asm volatile("mrs %0, ICC_IGRPEN1_EL1" : "=r"(grp1));
   const char hex_digits[] = "0123456789abcdef";
-  char line[] = "[gic] pmr=00 grp1=00\n";
-  line[11] = hex_digits[(pmr >> 4) & 0xF];
-  line[12] = hex_digits[pmr & 0xF];
-  line[19] = hex_digits[(grp1 >> 4) & 0xF];
-  line[20] = hex_digits[grp1 & 0xF];
+  char line[] = "[gic] init done (pmr=00 grp1=00)\n";
+  line[21] = hex_digits[(pmr >> 4) & 0xF];
+  line[22] = hex_digits[pmr & 0xF];
+  line[29] = hex_digits[(grp1 >> 4) & 0xF];
+  line[30] = hex_digits[grp1 & 0xF];
   uart_puts(line);
 }
 

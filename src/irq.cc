@@ -17,30 +17,22 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   uint32_t iar = gic_ack();
   uint32_t intid = iar & 0xFFFFFFu;
 
-  bool handled_timer = false;
-  if (intid == 1023u) {
-    gic_eoi(iar);
-    cpu->irq_depth--;
-    return;
-  }
-
   if (intid == 27u) {           // virtual timer PPI
     uart_putc(':');
     timer_irq();
-    handled_timer = true;
-  } else {
-    uart_putc('?');
-  }
-
-  if (handled_timer) {
     cpu->ticks++;
     dma_poll_complete();
     sched_on_tick();
     if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
       frame->elr = reinterpret_cast<uint64_t>(&preempt_return);
     }
+    gic_eoi(iar);
+  } else if (intid == 1023u) {
+    cpu->irq_depth--;
+    return;
+  } else {
+    uart_putc('?');
+    gic_eoi(iar);
   }
-
-  gic_eoi(iar);
   cpu->irq_depth--;
 }

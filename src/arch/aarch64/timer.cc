@@ -31,6 +31,7 @@ void timer_init_hz(uint32_t hz) {
   write_cntv_ctl(0);        // disable & unmask
   write_cntv_tval(ticks);   // program next expiry
   write_cntv_ctl(1);        // ENABLE=1, IMASK=0
+  asm volatile("isb");
 
   if (hz == 1000u) {
     uart_puts("Timer IRQ armed @1kHz\n");
