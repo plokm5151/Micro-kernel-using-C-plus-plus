@@ -16,7 +16,7 @@ jobs:
             clang lld llvm qemu-system-arm qemu-system-misc make
       - name: Build
         run: make -j
-      - name: Smoke run (5s)
+      - name: Smoke run (8s)
         run: scripts/smoke_run.sh
       - name: Upload ELF
         uses: actions/upload-artifact@v4
@@ -29,3 +29,9 @@ jobs:
         with:
           name: qemu-smoke-log
           path: build/qemu-smoke.log
+      - name: Upload QEMU debug log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-debug-log
+          path: build/qemu-debug.log

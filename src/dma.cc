@@ -1,5 +1,6 @@
 #include "dma.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include "arch/barrier.h"
 

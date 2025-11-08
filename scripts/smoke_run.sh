@@ -31,12 +31,16 @@ CMD=(
   -nographic
   -serial mon:stdio
   -kernel "${BUILD_DIR}/kernel.elf"
+  -d
+  guest_errors,unimp
+  -D
+  "${BUILD_DIR}/qemu-debug.log"
 )
 
-echo "[smoke] Launching QEMU with 5s timeout..."
+echo "[smoke] Launching QEMU with 8s timeout..."
 set +e
 # Capture output for log and console simultaneously.
-timeout 5s "${CMD[@]}" 2>&1 | tee "${LOG_PATH}"
+timeout 8s "${CMD[@]}" 2>&1 | tee "${LOG_PATH}"
 status=${PIPESTATUS[0]}
 set -e
 
@@ -54,6 +58,7 @@ required_messages=(
   "[BOOT] UART ready"
   "Timer IRQ armed @1kHz"
   "[sched] starting (coop)"
+  "[DMA OK]"
 )
 
 for message in "${required_messages[@]}"; do
