@@ -16,8 +16,8 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
   uint32_t intid = iar & 0xFFFFFFu;
   if (intid == 27u) {           // virtual timer PPI
     timer_irq();
-    cpu->ticks++;
     dma_poll_complete();
+    cpu->ticks++;
     sched_on_tick();
     if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
       frame->elr = reinterpret_cast<uint64_t>(&preempt_return);

@@ -68,7 +68,9 @@ extern "C" void kmain() {
   uart_puts("[diag] timer_init_hz\n");
   timer_init_hz(1000); // 1 kHz
 
+  uart_puts("[sched] starting (coop)\n");
   asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
+  asm volatile("isb");
 
   uart_puts("[diag] IRQ enabled\n");
 
@@ -90,7 +92,6 @@ extern "C" void kmain() {
     }
   }
 
-  uart_puts("[sched] starting (coop)\n");
   sched_start(); // 不返回
   while (1) { asm volatile("wfe"); }
 }
