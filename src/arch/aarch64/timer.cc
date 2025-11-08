@@ -1,27 +1,48 @@
 #include "drivers/uart_pl011.h"
 #include "arch/timer.h"
 
-static inline unsigned long long cntfrq() {
-  unsigned long long f=0; asm volatile("mrs %0, CNTFRQ_EL0":"=r"(f)); return f;
-}
-static inline void cntv_set_tval(uint32_t v){ asm volatile("msr CNTV_TVAL_EL0, %0"::"r"((uint64_t)v)); }
-static inline void cntv_enable(int en){
-  uint64_t ctl = en ? 1ull /*EN*/ : 0ull;
-  // bit0 EN=1, bit1 IMASK=0
-  asm volatile("msr CNTV_CTL_EL0, %0"::"r"(ctl));
+#include <stdint.h>
+
+static inline uint64_t read_cntfrq() {
+  uint64_t value = 0;
+  asm volatile("mrs %0, cntfrq_el0" : "=r"(value));
+  return value;
 }
 
-void timer_init_hz(uint32_t hz){
-  unsigned long long f = cntfrq();
-  uint32_t tval = (uint32_t)(f / hz);
-  cntv_set_tval(tval);
-  cntv_enable(1);
+static inline void write_cntv_tval(uint64_t value) {
+  asm volatile("msr cntv_tval_el0, %0" :: "r"(value));
 }
 
-void timer_irq(){
-  // re-arm
-  unsigned long long f = cntfrq();
-  uint32_t tval = (uint32_t)(f / 1000u);
-  cntv_set_tval(tval);
+static inline void write_cntv_ctl(uint64_t value) {
+  asm volatile("msr cntv_ctl_el0, %0" :: "r"(value));
+  asm volatile("isb");
+}
+
+void timer_init_hz(uint32_t hz) {
+  if (!hz) {
+    return;
+  }
+  uint64_t freq = read_cntfrq();
+  uint64_t ticks = freq / hz;
+  if (ticks == 0) {
+    ticks = 1;  // ensure timer fires
+  }
+
+  write_cntv_ctl(0);        // disable & unmask
+  write_cntv_tval(ticks);   // program next expiry
+  write_cntv_ctl(1);        // ENABLE=1, IMASK=0
+
+  if (hz == 1000u) {
+    uart_puts("Timer IRQ armed @1kHz\n");
+  }
+}
+
+void timer_irq() {
+  uint64_t freq = read_cntfrq();
+  uint64_t ticks = freq / 1000u;
+  if (ticks == 0) {
+    ticks = 1;
+  }
+  write_cntv_tval(ticks);
   uart_puts(".");
 }
