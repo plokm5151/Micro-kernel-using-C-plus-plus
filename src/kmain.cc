@@ -110,6 +110,17 @@ extern "C" void kmain() {
 
   uart_puts("[sched] starting (coop)\n");
 
+  // ---- 先初始化 GIC/Timer 並開 IRQ，確保 CI 能看到 Timer 訊息 ----
+  uart_puts("[diag] gic_init\n");
+  gic_init();
+  uart_puts("[diag] timer_init_hz\n");
+  timer_init_hz(1000); // 1 kHz
+
+  asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
+  asm volatile("isb");
+  uart_puts("[diag] IRQ enabled\n");
+
+  // ---- DMA 自測（不依賴 IRQ 時序，也會同步確認）----
   {
     constexpr size_t k_dma_test_len = 4096;
     g_dma_len = k_dma_test_len;
@@ -150,15 +161,6 @@ extern "C" void kmain() {
       }
     }
   }
-
-  uart_puts("[diag] gic_init\n");
-  gic_init();
-  uart_puts("[diag] timer_init_hz\n");
-  timer_init_hz(1000); // 1 kHz
-
-  asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
-  asm volatile("isb");
-  uart_puts("[diag] IRQ enabled\n");
 
 #if TEST_SGI_ON_BOOT
   {

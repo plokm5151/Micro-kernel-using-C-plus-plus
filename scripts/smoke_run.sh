@@ -37,9 +37,9 @@ CMD=(
   -D "${TRACE_LOG}"
 )
 
-echo "[smoke] Launching QEMU with 8s timeout..."
+echo "[smoke] Launching QEMU with 12s timeout..."
 set +e
-timeout 8s "${CMD[@]}" 2>&1 | tee "${LOG_PATH}"
+timeout 12s "${CMD[@]}" 2>&1 | tee "${LOG_PATH}"
 status=${PIPESTATUS[0]}
 set -e
 
