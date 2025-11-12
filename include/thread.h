@@ -1,7 +1,6 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-#include "arch/fpsimd.h"
 
 struct Thread {
   void*      sp;         // 保存的 stack pointer（arch_switch 用）
@@ -12,7 +11,12 @@ struct Thread {
   void*      stack_base; // for free/debug (暫不釋放)
   size_t     stack_size;
   int        budget;     // 剩餘時間片（tick 數）
-  struct fpsimd_state fp; // 每個 thread 的 FPSIMD 狀態
+
+  // ---- FPSIMD context (新增；放尾端避免對舊有程式碼的位移影響) ----
+  int        fpsimd_valid;                 // 0 = 未保存/初值為零, 1 = 已有有效內容
+  alignas(16) uint8_t fpsimd_vregs[32*16]; // q0..q31 共 512 bytes
+  uint64_t   fpcr;                         // FPCR
+  uint64_t   fpsr;                         // FPSR
 };
 
 #ifdef __cplusplus
