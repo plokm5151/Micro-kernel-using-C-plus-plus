@@ -2,6 +2,7 @@
 
 #include "arch/ctx.h"
 #include "arch/cpu_local.h"
+#include "arch/fpsimd.h"
 #include "drivers/uart_pl011.h"
 #include "kmem.h"
 
@@ -17,8 +18,11 @@ int next_thread_id = 1;
 
 static void do_switch(Thread* cur, Thread* next) {
   auto* cpu = cpu_local();
+  // 保存/復原 FPSIMD 狀態（V0–V31 + FPCR/FPSR）
+  fpsimd_save(&cur->fp);
   cpu->current_thread = next;
   arch_switch(&cur->sp, next->sp);
+  fpsimd_load(&next->fp);
 }
 }
 
@@ -82,6 +86,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   t->stack_base = stack;
   t->stack_size = stack_size;
   t->budget = RR_QUANTUM_TICKS;
+  // t->fp 已經被上面的清零覆蓋
 
   uart_puts("[sched][diag] thread created id=");
   uart_print_u64(static_cast<unsigned long long>(t->id));
@@ -179,4 +184,3 @@ extern "C" void sched_resched_from_irq_tail(void) {
   do_switch(cur, next);
   cpu->need_resched = 0;
 }
-

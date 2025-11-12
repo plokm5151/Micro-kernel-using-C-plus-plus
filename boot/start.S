@@ -22,6 +22,13 @@ _start:
   b.lo 1b
 2:
 
+  // ---- Enable FP/ASIMD at EL1: CPACR_EL1.FPEN[21:20] = 0b11 ----
+  mrs x3, cpacr_el1
+  orr x3, x3, #(3 << 20)
+  msr cpacr_el1, x3
+  isb
+  // --------------------------------------------------------------
+
   bl kmain
 3: wfe
    b 3b
