@@ -25,9 +25,8 @@ $(error Could not find any of the following linkers: $(LLD_CANDIDATES))
 endif
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
-CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 -DUSE_CNTP=0
-# IRQ 熱路徑：禁止向量化，僅用一般暫存器，避免在中斷中動到 V 寄存器
-CXXFLAGS_IRQ:= $(CXXFLAGS) -mgeneral-regs-only -fno-vectorize -fno-slp-vectorize
+# 暫時關閉自動向量化，待實作 FPSIMD context save/restore 後再移除以下兩個 flag
+CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 -DUSE_CNTP=0 -fno-vectorize -fno-slp-vectorize
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T boot/kernel.ld
 
@@ -45,7 +44,6 @@ OBJS := \
   build/thread.o \
   build/preempt.o \
   build/dma.o \
-  build/fpsimd.o \
   build/except.o \
   build/kmain.o
 
@@ -65,10 +63,9 @@ build/uart_pl011.o: src/drivers/uart_pl011.cc src/drivers/uart_pl011.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
-# IRQ 熱路徑（gic/timer/irq/dma）改用 CXXFLAGS_IRQ
 build/gicv3.o: src/arch/aarch64/gicv3.cc include/arch/gicv3.h
 	mkdir -p build
-	$(CXX) $(CXXFLAGS_IRQ) -Iinclude -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/cpu_local.o: src/arch/aarch64/cpu_local.cc include/arch/cpu_local.h
 	mkdir -p build
@@ -80,11 +77,11 @@ build/ctx.o: src/arch/aarch64/ctx.S include/arch/ctx.h
 
 build/timer.o: src/arch/aarch64/timer.cc include/arch/timer.h
 	mkdir -p build
-	$(CXX) $(CXXFLAGS_IRQ) -Iinclude -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/irq.o: src/irq.cc include/irq.h
 	mkdir -p build
-	$(CXX) $(CXXFLAGS_IRQ) -Iinclude -Isrc -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/kmem.o: src/kmem.cc include/kmem.h
 	mkdir -p build
@@ -100,11 +97,7 @@ build/preempt.o: src/preempt.cc include/preempt.h include/arch/cpu_local.h inclu
 
 build/dma.o: src/dma.cc include/dma.h include/arch/barrier.h
 	mkdir -p build
-	$(CXX) $(CXXFLAGS_IRQ) -Iinclude -Isrc -c $< -o $@
-
-build/fpsimd.o: src/arch/aarch64/fpsimd.S include/arch/fpsimd.h
-	mkdir -p build
-	$(CC) $(ASFLAGS) -c $< -o $@
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/except.o: src/arch/aarch64/except.cc include/arch/except.h
 	mkdir -p build

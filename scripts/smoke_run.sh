@@ -53,6 +53,12 @@ if [[ ${status} -ne 0 ]]; then
   exit "${status}"
 fi
 
+# NEW: fail fast if any exception was logged.
+if grep -qF "[EXC]" "${LOG_PATH}"; then
+  echo "::error ::Exception detected in boot log; see ESR/ELR/SPSR above"
+  exit 1
+fi
+
 # 基本啟動訊息
 required_messages=(
   "[BOOT] UART ready"
@@ -95,7 +101,7 @@ if ! grep -qE "ab|ba" "${LOG_PATH}"; then
   echo "::error ::Missing evidence of RR preemption interleaving a/b"
   exit 1
 fi
-if ! grep -qE "a[^b]*a" "${LOG_PATH}"; then
+if ! printf '%s' "${flat_log}" | grep -q 'a[^b]*a'; then
   echo "::error ::Missing critical section block of a without b"
   exit 1
 fi

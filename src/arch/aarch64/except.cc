@@ -4,6 +4,7 @@
 
 namespace {
 constexpr char kHexDigits[] = "0123456789abcdef";
+
 static void puthex64(uint64_t v){
   if (!v){ uart_putc('0'); return; }
   char b[16]; int i=0; while(v && i<16){ b[i++]=kHexDigits[v&0xF]; v>>=4; }
@@ -16,16 +17,17 @@ static void puthex32(uint32_t v){
 }
 static const char* ec_name(uint32_t ec){
   switch(ec){
+    case 0x07: return "FP/ASIMD trap";   // <== 新增：對應 ESR EC=0x07
     case 0x15: return "SVC64";
     case 0x18: return "IABT";
     case 0x24: return "DABT";
     case 0x26: return "SP alignment";
     case 0x2f: return "SError";
     case 0x00: return "Unknown";
-    default: return "?";
+    default:   return "?";
   }
 }
-}
+} // namespace
 
 extern "C" void except_el1_sync(uint64_t esr, uint64_t elr, uint64_t far, uint64_t spsr, uint64_t tag){
   uint32_t ec = (uint32_t)((esr >> 26) & 0x3F);
@@ -36,6 +38,5 @@ extern "C" void except_el1_sync(uint64_t esr, uint64_t elr, uint64_t far, uint64
   uart_puts(" FAR=0x"); puthex64(far);
   uart_puts(" SPSR=0x"); puthex64(spsr);
   uart_puts("\n");
-  // 停機等待收集 log
   while (1) { asm volatile("wfe"); }
 }
