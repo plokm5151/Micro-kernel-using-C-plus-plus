@@ -78,6 +78,10 @@ build/timer.o: src/arch/aarch64/timer.cc include/arch/timer.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
+build/except.o: src/arch/aarch64/except.cc include/arch/except.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
 build/irq.o: src/irq.cc include/irq.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
