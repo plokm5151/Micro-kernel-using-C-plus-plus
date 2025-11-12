@@ -1,54 +1,38 @@
-// irq_el1 masks IRQs on entry so the prologue cannot nest interrupts, with
-// the mask/unmask happening before we spill registers in the irq_el1 prologue.
-// End-of-interrupt is driven from C (irq_handler_el1) prior to the register
-// restore epilogue so the GIC sees the EOI before state is popped.
-// Switching to per-CPU IRQ stacks requires revisiting the stack pointer setup
-// around the irq_el1 stack allocation (`sub sp, sp, #IRQ_FRAME_SIZE`).
-// The spill layout defined by IRQ_FRAME_* must be kept in sync with the frame
-// created in the irq_el1 prologue when reworking the per-CPU IRQ stack path.
   .align 11
   .global __vec_base
 __vec_base:
 
-// EL1t
-  .balign 0x80
-  b .
-
-  .balign 0x80
+// ===== EL1t =====
+  .balign 0x80                // Synchronous EL1t
+  b sync_el1t
+  .balign 0x80                // IRQ EL1t
   b irq_el1
+  .balign 0x80                // FIQ EL1t (unused)
+  b sync_el1t
+  .balign 0x80                // SError EL1t
+  b sync_el1t
 
-  .balign 0x80
-  b .
-
-  .balign 0x80
-  b .
-
-// EL1h
-  .balign 0x80
-  b .
-
-  .balign 0x80
+// ===== EL1h =====
+  .balign 0x80                // Synchronous EL1h
+  b sync_el1h
+  .balign 0x80                // IRQ EL1h
   b irq_el1
+  .balign 0x80                // FIQ EL1h (unused)
+  b sync_el1h
+  .balign 0x80                // SError EL1h
+  b sync_el1h
 
-  .balign 0x80
-  b .
-
-  .balign 0x80
-  b .
-
-// EL0_64
-  .balign 0x80
-  b .
-
-  .balign 0x80
+// ===== EL0_64 =====
+  .balign 0x80                // Synchronous EL0_64
+  b sync_el0_64
+  .balign 0x80                // IRQ EL0_64
   b irq_el1
+  .balign 0x80                // FIQ EL0_64 (unused)
+  b sync_el0_64
+  .balign 0x80                // SError EL0_64
+  b sync_el0_64
 
-  .balign 0x80
-  b .
-
-  .balign 0x80
-  b .
-
+  // --- IRQ frame layout 與 irq_el1 保持原樣 ---
   .equ IRQ_FRAME_SIZE, 192
   .equ IRQ_FRAME_X0, 0
   .equ IRQ_FRAME_X2, 16
@@ -70,8 +54,6 @@ irq_el1:
   msr daifset, #0b0010
   mrs x19, tpidr_el1
   cbz x19, 1f
-  // cpu_local.irq_stack_top is at offset 0; keep in sync with struct cpu_local
-  // in include/arch/cpu_local.h (validated via static_assert in C).
   ldr x20, [x19, #0]
   mov x21, sp
   mov sp, x20
@@ -97,8 +79,6 @@ irq_el1:
   str x18, [sp, #IRQ_FRAME_SPSR]
   mrs x18, elr_el1
   str x18, [sp, #IRQ_FRAME_ELR]
-  // TODO: spill q0–q7 once SIMD is enabled.
-  // irq_handler_el1 executes with IRQs masked.
   mov x0, sp
   bl irq_handler_el1
   mov x9, sp
@@ -120,3 +100,33 @@ irq_el1:
   ldr x30, [x9, #IRQ_FRAME_LR]
   ldp x8, x9, [x9, #IRQ_FRAME_X8]
   eret
+
+  .extern except_el1_sync
+
+// --- 極簡同步例外轉印到 C ---
+sync_el1h:
+  mrs x0, esr_el1
+  mrs x1, elr_el1
+  mrs x2, far_el1
+  mrs x3, spsr_el1
+  mov x4, #0x11    // tag: EL1h
+  bl except_el1_sync
+  b .
+
+sync_el1t:
+  mrs x0, esr_el1
+  mrs x1, elr_el1
+  mrs x2, far_el1
+  mrs x3, spsr_el1
+  mov x4, #0x10    // tag: EL1t
+  bl except_el1_sync
+  b .
+
+sync_el0_64:
+  mrs x0, esr_el1
+  mrs x1, elr_el1
+  mrs x2, far_el1
+  mrs x3, spsr_el1
+  mov x4, #0x0     // tag: EL0_64
+  bl except_el1_sync
+  b .

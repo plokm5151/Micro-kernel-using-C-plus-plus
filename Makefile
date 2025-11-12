@@ -25,7 +25,8 @@ $(error Could not find any of the following linkers: $(LLD_CANDIDATES))
 endif
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
-CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti
+# 暫時關閉自動向量化（等 FPSIMD context 完整驗證後可移除）
+CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 -DUSE_CNTP=0 -fno-vectorize -fno-slp-vectorize
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T boot/kernel.ld
 
@@ -42,6 +43,9 @@ OBJS := \
   build/kmem.o \
   build/thread.o \
   build/preempt.o \
+  build/dma.o \
+  build/except.o \
+  build/fpsimd.o \
   build/kmain.o
 
 ELF := build/kernel.elf
@@ -89,6 +93,19 @@ build/thread.o: src/thread.cc include/thread.h include/arch/ctx.h include/arch/c
 	$(CXX) $(CXXFLAGS) -mgeneral-regs-only -Iinclude -Isrc -c $< -o $@
 
 build/preempt.o: src/preempt.cc include/preempt.h include/arch/cpu_local.h include/thread.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/dma.o: src/dma.cc include/dma.h include/arch/barrier.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/except.o: src/arch/aarch64/except.cc include/arch/except.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+# NEW: FPSIMD
+build/fpsimd.o: src/arch/aarch64/fpsimd.cc include/arch/fpsimd.h include/arch/cpu_local.h include/thread.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 

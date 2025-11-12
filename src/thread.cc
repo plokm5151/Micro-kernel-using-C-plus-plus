@@ -2,6 +2,7 @@
 
 #include "arch/ctx.h"
 #include "arch/cpu_local.h"
+#include "arch/fpsimd.h"
 #include "drivers/uart_pl011.h"
 #include "kmem.h"
 
@@ -17,8 +18,12 @@ int next_thread_id = 1;
 
 static void do_switch(Thread* cur, Thread* next) {
   auto* cpu = cpu_local();
+  // 統一使用「無參數版」FPSIMD API（狀態從 cpu_local()->current_thread 取得/寫回）
+  // 先保存當前 thread 的 FPSIMD，切換 current_thread，再載入新 thread 的 FPSIMD
+  fpsimd_save();
   cpu->current_thread = next;
   arch_switch(&cur->sp, next->sp);
+  fpsimd_load();
 }
 }
 
@@ -67,6 +72,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
     sp_words[1] = second;
   };
 
+  // 對應 arch_switch 保存/復原的 x19..x30
   push_pair(0, 0);  // (x19, x20)
   push_pair(0, 0);  // (x21, x22)
   push_pair(0, 0);  // (x23, x24)
@@ -82,6 +88,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   t->stack_base = stack;
   t->stack_size = stack_size;
   t->budget = RR_QUANTUM_TICKS;
+  // FPSIMD 區塊已被清零：fpsimd_valid=0, vregs=0, fpcr/fpsr=0
 
   uart_puts("[sched][diag] thread created id=");
   uart_print_u64(static_cast<unsigned long long>(t->id));
@@ -121,6 +128,7 @@ extern "C" void sched_start(void) {
   cpu_local()->current_thread = cur;
   void* boot_sp = nullptr;
   arch_switch(&boot_sp, cur->sp);
+  uart_puts("[BUG] returned to sched_start\n");
   while (1) {
     asm volatile("wfe");
   }
@@ -178,4 +186,3 @@ extern "C" void sched_resched_from_irq_tail(void) {
   do_switch(cur, next);
   cpu->need_resched = 0;
 }
-
