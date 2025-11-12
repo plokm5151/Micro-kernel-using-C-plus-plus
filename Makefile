@@ -43,6 +43,7 @@ OBJS := \
   build/thread.o \
   build/preempt.o \
   build/dma.o \
+  build/except.o \
   build/kmain.o
 
 ELF := build/kernel.elf
