@@ -63,6 +63,7 @@ static void dma_test_cb(void* user, int status) {
 
 extern "C" void kmain() {
   uart_init();
+  uart_puts("[build] " __DATE__ " " __TIME__ "\n");
   uart_puts("[BOOT] UART ready\n");
 
   uart_puts("[diag] cpu_local_boot_init begin\n");

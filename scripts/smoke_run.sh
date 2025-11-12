@@ -14,7 +14,8 @@ BUILD_DIR="${REPO_ROOT}/build"
 LOG_PATH="${BUILD_DIR}/qemu-smoke.log"
 TRACE_LOG="${BUILD_DIR}/qemu-trace.log"
 
-echo "[smoke] Building kernel (make -j)..."
+echo "[smoke] Building kernel (make clean && make -j)..."
+make clean
 if ! make -j; then
   echo "::error ::Kernel build failed; see make output above"
   exit 1
@@ -100,7 +101,7 @@ if ! grep -qE "a[^b]*a" "${LOG_PATH}"; then
 fi
 echo "[smoke] Scheduler output verified."
 
-# DMA 驗收
+# DMA 驗收（一定要看到）
 if grep -qF "[DMA FAIL]" "${LOG_PATH}"; then
   echo "::error ::DMA self-test reported failure"
   exit 1

@@ -50,7 +50,7 @@ inline void gicr_wake() {
   w &= ~(1u << 1);                            // ProcessorSleep = 0
   mmio_w32(GICR_BASE + 0x0014, w);
   while (mmio_r32(GICR_BASE + 0x0014) & (1u << 2)) {
-    // Wait until ChildrenAsleep is cleared, guaranteeing the redistributor is awake
+    // Wait until ChildrenAsleep is cleared
   }
 }
 
@@ -75,8 +75,8 @@ void gic_init() {
   mmio_w32(GICR_SGI_BASE + 0x0080, 0xFFFFFFFFu); // GICR_IGROUPR0
   mmio_w32(GICR_SGI_BASE + 0x0D00, 0x00000000u); // GICR_IGRPMODR0: NS Group1
 
-  // Level-triggered for PPIs: GICR_ICFGR1 (INTIDs 16..31)
-  mmio_w32(GICR_SGI_BASE + 0x00C4, 0x00000000u);
+  // Level-triggered for PPIs: **GICR_ICFGR1 is at 0x0C04 (NOT 0x00C4)**
+  mmio_w32(GICR_SGI_BASE + 0x0C04, 0x00000000u); // GICR_ICFGR1
 
   // Enable SGI #1 plus the selected timer PPI
 #if USE_CNTP
@@ -87,7 +87,7 @@ void gic_init() {
 
   // Priority for INTIDs 1/27/30 (one byte per INTID from 0..31)
   volatile uint8_t* prio = (volatile uint8_t*)(GICR_SGI_BASE + 0x0400);
-  prio[1] = 0x80;
+  prio[1]  = 0x80;
   prio[27] = 0x80;
   prio[30] = 0x80;
 
@@ -102,27 +102,20 @@ void gic_init() {
   asm volatile("isb");
 
   const uint32_t group = mmio_r32(GICR_SGI_BASE + 0x0080);
-  const uint32_t modr = mmio_r32(GICR_SGI_BASE + 0x0D00);
-  const uint32_t isen = mmio_r32(GICR_SGI_BASE + 0x0100);
-  uart_puts("[gicr] group=0x");
-  uart_puthex32(group);
-  uart_puts(" modr=0x");
-  uart_puthex32(modr);
-  uart_puts(" isen=0x");
-  uart_puthex32(isen);
+  const uint32_t modr  = mmio_r32(GICR_SGI_BASE + 0x0D00);
+  const uint32_t isen  = mmio_r32(GICR_SGI_BASE + 0x0100);
+  uart_puts("[gicr] group=0x"); uart_puthex32(group);
+  uart_puts(" modr=0x");        uart_puthex32(modr);
+  uart_puts(" isen=0x");        uart_puthex32(isen);
   uart_puts("\n");
 
   const uint32_t ctlr = mmio_r32(GICD_BASE + 0x0000);
-  uart_puts("[gicd] ctlr=0x");
-  uart_puthex32(ctlr);
-  uart_puts("\n");
+  uart_puts("[gicd] ctlr=0x"); uart_puthex32(ctlr); uart_puts("\n");
 
-  const uint64_t pmr = read_icc_pmr();
+  const uint64_t pmr  = read_icc_pmr();
   const uint64_t grp1 = read_icc_igrpen1();
-  uart_puts("[icc] pmr=0x");
-  uart_puthex64(pmr);
-  uart_puts(" grp1=0x");
-  uart_puthex64(grp1);
+  uart_puts("[icc] pmr=0x"); uart_puthex64(pmr);
+  uart_puts(" grp1=0x");      uart_puthex64(grp1);
   uart_puts("\n");
 
   uart_puts("[gic] init done\n");
