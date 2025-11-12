@@ -10,7 +10,7 @@
 #include "preempt.h"
 #include "dma.h"
 
-// 供位址印出
+// External memory region symbols
 extern "C" {
   extern char __dma_nc_start[];
   extern char __dma_nc_end[];
@@ -18,9 +18,6 @@ extern "C" {
   extern char _heap_end[];
 }
 
-#ifndef TEST_SGI_ON_BOOT
-#define TEST_SGI_ON_BOOT 1
-#endif
 #ifndef ARM_TIMER_DIAG
 #define ARM_TIMER_DIAG 1
 #endif
@@ -34,23 +31,18 @@ constexpr char kHexDigits[] = "0123456789abcdef";
 static void uart_puthex64(uint64_t value) {
   if (value == 0) { uart_putc('0'); return; }
   char buf[16]; int idx = 0;
-  while (value != 0 && idx < 16) { buf[idx++] = kHexDigits[value & 0xFu]; value >>= 4; }
+  while (value && idx < 16) { buf[idx++] = kHexDigits[value & 0xFu]; value >>= 4; }
   while (idx--) uart_putc(buf[idx]);
 }
-
-#if ARM_TIMER_DIAG
-static inline uint64_t read_cntp_ctl_diag() { uint64_t v=0; asm volatile("mrs %0, cntp_ctl_el0":"=r"(v)); return v; }
-static inline uint64_t read_cntv_ctl_diag() { uint64_t v=0; asm volatile("mrs %0, cntv_ctl_el0":"=r"(v)); return v; }
-#endif
 
 static inline void spin(unsigned n) { for (volatile unsigned i=0;i<n;i++){} }
 } // namespace
 
-// ----------- threads -----------
+// ---------------- Threads ----------------
 static void a(void* arg);
 static void b(void* arg);
 
-// ----------- DMA 自測狀態 -----------
+// ---------------- DMA self-test globals ----------------
 static uint8_t* g_dma_src_buf = nullptr;
 static uint8_t* g_dma_dst_buf = nullptr;
 static size_t   g_dma_len     = 0;
@@ -73,7 +65,6 @@ extern "C" void kmain() {
   uart_init();
   uart_puts("[BOOT] UART ready\n");
 
-  // --- 基礎子系統 ---
   uart_puts("[diag] cpu_local_boot_init begin\n");
   cpu_local_boot_init();
   uart_puts("[diag] cpu_local_boot_init end\n");
@@ -82,7 +73,51 @@ extern "C" void kmain() {
   kmem_init();
   uart_puts("[diag] kmem_init end\n");
 
-  // --- 建立最小線程集合（先不切入）---
+  // ==============================
+  // DMA Self-Test (runs synchronously)
+  // ==============================
+  uart_puts("[dma-selftest] D0 enter\n");
+  uart_puts("[dma-selftest] dma_nc=[0x"); uart_puthex64((uint64_t)(uintptr_t)__dma_nc_start);
+  uart_puts(" .. 0x"); uart_puthex64((uint64_t)(uintptr_t)__dma_nc_end);
+  uart_puts("] heap=[0x"); uart_puthex64((uint64_t)(uintptr_t)_heap_start);
+  uart_puts(" .. 0x"); uart_puthex64((uint64_t)(uintptr_t)_heap_end);
+  uart_puts("]\n");
+
+  constexpr size_t k_dma_test_len = 1024; // 1 KiB
+  g_dma_len = k_dma_test_len;
+
+  g_dma_src_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+  g_dma_dst_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+
+  if (!g_dma_src_buf || !g_dma_dst_buf) {
+    uart_puts("[DMA] buffer allocation failed\n");
+  } else {
+    for (size_t i = 0; i < k_dma_test_len; ++i) {
+      g_dma_src_buf[i] = static_cast<uint8_t>((i * 7u) & 0xFFu);
+      g_dma_dst_buf[i] = 0u;
+    }
+    uart_puts("[dma-selftest] D1 filled\n");
+
+    g_dma_cb_seen = 0;
+    int submit = dma_submit_memcpy(g_dma_dst_buf, g_dma_src_buf, k_dma_test_len, dma_test_cb, (void*)&g_dma_cb_seen);
+    if (submit != 0) {
+      uart_puts("[DMA] submit failed\n");
+    } else {
+      uart_puts("[DMA] submit ok\n");
+      dma_poll_complete();
+      if (!g_dma_cb_seen) {
+        bool ok = true;
+        for (size_t i = 0; i < g_dma_len; ++i) {
+          if (g_dma_dst_buf[i] != g_dma_src_buf[i]) { ok = false; break; }
+        }
+        uart_puts(ok ? "[DMA OK]\n" : "[DMA FAIL]\n");
+      }
+    }
+  }
+
+  // ==============================
+  // Scheduler & IRQ setup
+  // ==============================
   uart_puts("[diag] sched_init\n");
   sched_init();
   uart_puts("[diag] thread_create a\n");
@@ -95,102 +130,19 @@ extern "C" void kmain() {
   }
   uart_puts("[diag] sched_add a\n"); sched_add(ta);
   uart_puts("[diag] sched_add b\n"); sched_add(tb);
-
   uart_puts("[sched] starting (coop)\n");
 
-  // =========================
-  // 將 GIC/Timer/開 IRQ 提前
-  // =========================
   uart_puts("[diag] gic_init\n");
   gic_init();
 
   uart_puts("[diag] timer_init_hz\n");
-  timer_init_hz(1000); // 1 kHz → 會印 "Timer IRQ armed @1kHz"
+  timer_init_hz(1000); // 1kHz
 
-  asm volatile("msr daifclr, #2"); // enable IRQ (clear I)
+  asm volatile("msr daifclr, #2" ::: "memory"); // Enable IRQ
   asm volatile("isb");
   uart_puts("[diag] IRQ enabled\n");
 
-#if TEST_SGI_ON_BOOT
-  { // 發一顆 SGI #1 當煙測
-    uint64_t sgi = 0;
-    const uint64_t intid = 1ull;       // SGI #1
-    const uint64_t target_list = 1ull; // current CPU (bit0)
-    sgi |= (intid & 0xFu) << 24;
-    sgi |= (target_list & 0xFFFFu);
-    asm volatile("msr ICC_SGI1R_EL1, %0" :: "r"(sgi) : "memory");
-    asm volatile("isb");
-  }
-#endif
-
-#if ARM_TIMER_DIAG
-  { // 確認 CNTx_CTL 狀態
-    const uint64_t cntp_ctl = read_cntp_ctl_diag();
-    const uint64_t cntv_ctl = read_cntv_ctl_diag();
-    unsigned long irq_flags = local_irq_save();
-    uart_puts("[probe] cntp_ctl=0x"); uart_puthex64(cntp_ctl);
-    uart_puts(" cntv_ctl=0x");        uart_puthex64(cntv_ctl);
-    uart_puts("\n");
-    local_irq_restore(irq_flags);
-  }
-#endif
-
-  // ==================================
-  // DMA 自測（加入 D0~D4 斷點與位址列印）
-  // ==================================
-  uart_puts("[dma-selftest] D0 enter\n");
-  uart_puts("[dma-selftest] dma_nc=[0x"); uart_puthex64((uint64_t)(uintptr_t)__dma_nc_start);
-  uart_puts(" .. 0x");                   uart_puthex64((uint64_t)(uintptr_t)__dma_nc_end);
-  uart_puts("] heap=[0x");               uart_puthex64((uint64_t)(uintptr_t)_heap_start);
-  uart_puts(" .. 0x");                   uart_puthex64((uint64_t)(uintptr_t)_heap_end);
-  uart_puts("]\n");
-
-  {
-    // 降低資料量，避免模擬邊界；確保決定性
-    constexpr size_t k_dma_test_len = 1024;  // 1 KiB
-    g_dma_len = k_dma_test_len;
-
-    g_dma_src_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
-    g_dma_dst_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
-    if (!g_dma_src_buf || !g_dma_dst_buf) {
-      uart_puts("[DMA] buffer allocation failed\n");
-    } else {
-      uart_puts("[dma-selftest] D1 buffers ready\n");
-      for (size_t i = 0; i < k_dma_test_len; ++i) {
-        g_dma_src_buf[i] = static_cast<uint8_t>((i * 7u) & 0xFFu);
-        g_dma_dst_buf[i] = 0u;
-      }
-      uart_puts("[dma-selftest] D2 pattern filled\n");
-
-      g_dma_cb_seen = 0;
-      const volatile void* cb_user_const = &g_dma_cb_seen;
-      void* cb_user = const_cast<void*>(cb_user_const);
-      int submit = dma_submit_memcpy(g_dma_dst_buf, g_dma_src_buf, k_dma_test_len,
-                                     dma_test_cb, cb_user);
-      if (submit != 0) {
-        uart_puts("[DMA] submit failed\n");
-      } else {
-        uart_puts("[DMA] submit ok\n");
-        uart_puts("[dma-selftest] D3 submitted\n");
-
-        // 立即同步輪詢一次；若 IRQ 節奏慢，仍可落地結果
-        dma_poll_complete();
-
-        if (!g_dma_cb_seen) {
-          // Fallback：主線程直接比對並印結果，確保 CI 可判定
-          bool ok = true;
-          for (size_t i = 0; i < g_dma_len; ++i) {
-            if (g_dma_dst_buf[i] != g_dma_src_buf[i]) { ok = false; break; }
-          }
-          uart_puts(ok ? "[DMA OK]\n" : "[DMA FAIL]\n");
-          g_dma_cb_seen = 1;
-        }
-        uart_puts("[dma-selftest] D4 done\n");
-      }
-    }
-  }
-
-  // 進入 scheduler（不可返回）
+  // Enter scheduler
   sched_start();
   uart_puts("[BUG] returned to sched_start\n");
   while (1) { asm volatile("wfe"); }
