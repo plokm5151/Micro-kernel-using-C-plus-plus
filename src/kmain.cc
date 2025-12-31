@@ -65,15 +65,17 @@ extern "C" void kmain() {
   uart_init();
   uart_puts("[BOOT] UART ready\n");
 
+  uart_puts("[mmu] enabling...\n");
+  mmu_init(true);
+
   uint64_t sctlr = 0;
   asm volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
-  uart_puts("[mmu] sctlr=0x"); uart_puthex64(sctlr);
+  uart_puts("[mmu] enabled sctlr=0x"); uart_puthex64(sctlr);
   uart_puts(" (C="); uart_putc((sctlr & (1u << 2)) ? '1' : '0');
   uart_puts(", I="); uart_putc((sctlr & (1u << 12)) ? '1' : '0');
   uart_puts(", M="); uart_putc((sctlr & (1u << 0)) ? '1' : '0');
   uart_puts(")\n");
   mmu_dump_state();
-  mmu_init(false);
 
   uart_puts("[diag] cpu_local_boot_init begin\n");
   cpu_local_boot_init();
