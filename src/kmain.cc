@@ -5,6 +5,7 @@
 #include "arch/timer.h"
 #include "arch/irqflags.h"
 #include "arch/ctx.h"
+#include "arch/mmu.h"
 #include "kmem.h"
 #include "thread.h"
 #include "preempt.h"
@@ -63,6 +64,16 @@ static void dma_test_cb(void* user, int status) {
 extern "C" void kmain() {
   uart_init();
   uart_puts("[BOOT] UART ready\n");
+
+  uint64_t sctlr = 0;
+  asm volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+  uart_puts("[mmu] sctlr=0x"); uart_puthex64(sctlr);
+  uart_puts(" (C="); uart_putc((sctlr & (1u << 2)) ? '1' : '0');
+  uart_puts(", I="); uart_putc((sctlr & (1u << 12)) ? '1' : '0');
+  uart_puts(", M="); uart_putc((sctlr & (1u << 0)) ? '1' : '0');
+  uart_puts(")\n");
+  mmu_dump_state();
+  mmu_init(false);
 
   uart_puts("[diag] cpu_local_boot_init begin\n");
   cpu_local_boot_init();

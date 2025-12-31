@@ -38,6 +38,7 @@ OBJS := \
   build/ctx.o \
   build/cpu_local.o \
   build/barrier.o \
+  build/mmu.o \
   build/timer.o \
   build/irq.o \
   build/kmem.o \
@@ -114,6 +115,10 @@ build/kmain.o: src/kmain.cc
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/barrier.o: src/arch/aarch64/barrier.cc include/arch/barrier.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/mmu.o: src/arch/aarch64/mmu.cc include/arch/mmu.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
