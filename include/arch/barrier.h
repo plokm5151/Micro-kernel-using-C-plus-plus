@@ -11,21 +11,38 @@ static inline void dsb_ish(void) {
   asm volatile("dsb ish" ::: "memory");
 }
 
+// Base memory barriers (Outer Shareable domain).
+static inline void dmb_osh(void) {
+  asm volatile("dmb osh" ::: "memory");
+}
+
+static inline void dmb_oshst(void) {
+  asm volatile("dmb oshst" ::: "memory");
+}
+
+static inline void dmb_oshld(void) {
+  asm volatile("dmb oshld" ::: "memory");
+}
+
+static inline void dsb_osh(void) {
+  asm volatile("dsb osh" ::: "memory");
+}
+
 static inline void isb(void) {
   asm volatile("isb" ::: "memory");
 }
 
 // DMA-friendly ordering helpers (mirroring common Linux semantics).
 static inline void dma_wmb(void) {
-  asm volatile("dmb ishst" ::: "memory");
+  dmb_oshst();
 }
 
 static inline void dma_rmb(void) {
-  asm volatile("dmb ishld" ::: "memory");
+  dmb_oshld();
 }
 
 static inline void dma_mb(void) {
-  asm volatile("dmb ish" ::: "memory");
+  dmb_osh();
 }
 
 // Cache maintenance over virtual address ranges (Normal cacheable memory only).
@@ -43,4 +60,3 @@ void dc_ivac_range(const void* p, size_t len);
 #ifdef __cplusplus
 }
 #endif
-
