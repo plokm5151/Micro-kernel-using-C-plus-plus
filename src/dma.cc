@@ -23,14 +23,61 @@ static bool dma_cache_maint_allowed(const void* buf, size_t len) {
   uintptr_t end = start + (len - 1u);
   if (end < start) return false;  // overflow
 
-  // Policy: current MMU setup maps 0x00000000..0x3FFFFFFF as Device-nGnRE and
-  // 0x40000000..0x7FFFFFFF as Normal WBWA. Cache maintenance by VA must not
-  // target Device/non-cacheable mappings, so we only operate on the Normal
-  // region for now. If the mapping policy changes (e.g., a non-cacheable DMA
-  // carveout inside the Normal window), update this classification.
+  // Policy: only perform cache maintenance by VA on Normal *cacheable* mappings.
+  // This kernel maps:
+  //   - 0x00000000..0x3FFFFFFF as Device-nGnRE
+  //   - 0x40000000..0x7FFFFFFF as Normal (mostly WBWA)
+  //   - 0x80000000..0xBFFFFFFF as a Normal Non-cacheable alias of RAM
+  //
+  // Under DMA_WINDOW_POLICY=NONCACHEABLE, pages in __dma_nc_start..end are
+  // mapped as Normal Non-cacheable in the primary (0x4...) view, so we must
+  // avoid DC ops on that carveout as well.
   constexpr uintptr_t kNormalStart = 0x40000000ull;
   constexpr uintptr_t kNormalEnd = 0x80000000ull;  // exclusive
-  return start >= kNormalStart && end < kNormalEnd;
+  constexpr uintptr_t kAliasStart = 0x80000000ull;
+  constexpr uintptr_t kAliasEnd = 0xC0000000ull;  // exclusive
+
+  if (start >= kAliasStart && end < kAliasEnd) return false;
+  if (!(start >= kNormalStart && end < kNormalEnd)) return false;
+
+#if defined(DMA_WINDOW_POLICY_NONCACHEABLE)
+  const uintptr_t dma_start = reinterpret_cast<uintptr_t>(__dma_nc_start);
+  const uintptr_t dma_end = reinterpret_cast<uintptr_t>(__dma_nc_end);
+  if (end >= dma_start && start < dma_end) return false;
+#endif
+
+  return true;
+}
+
+static inline bool mmu_translation_enabled() {
+  uint64_t sctlr = 0;
+  asm volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+  return (sctlr & 1u) != 0;
+}
+
+static const void* dma_device_view(const void* buf, size_t len) {
+  if (!buf || len == 0) return buf;
+  if (!mmu_translation_enabled()) return buf;
+
+  uintptr_t start = reinterpret_cast<uintptr_t>(buf);
+  uintptr_t end = start + (len - 1u);
+  if (end < start) return buf;  // overflow
+
+  constexpr uintptr_t kNormalStart = 0x40000000ull;
+  constexpr uintptr_t kNormalEnd = 0x80000000ull;  // exclusive
+  constexpr uintptr_t kAliasStart = 0x80000000ull;
+  constexpr uintptr_t kAliasEnd = 0xC0000000ull;  // exclusive
+  constexpr uintptr_t kAliasOffset = 0x40000000ull;
+
+  if (start >= kAliasStart && end < kAliasEnd) return buf;
+  if (start >= kNormalStart && end < kNormalEnd) {
+    return reinterpret_cast<const void*>(start + kAliasOffset);
+  }
+  return buf;
+}
+
+static void* dma_device_view(void* buf, size_t len) {
+  return const_cast<void*>(dma_device_view(static_cast<const void*>(buf), len));
 }
 
 static void dma_prepare_to_device(void* buf, size_t len) {
@@ -74,8 +121,8 @@ struct dma_desc {
   dma_desc* next;
 };
 
-static char* const g_dma_pool_end = __dma_nc_end;
-static char* g_dma_pool_next = __dma_nc_start;
+static char* g_dma_desc_next = __dma_nc_start;
+static char* g_dma_buf_end = __dma_nc_end;
 
 static dma_desc* g_pending_head = nullptr;
 static dma_desc* g_pending_tail = nullptr;
@@ -86,13 +133,30 @@ static void dma_memcpy(void* dst, const void* src, size_t len){
 }
 
 static dma_desc* dma_alloc_desc(void){
-  uintptr_t raw=(uintptr_t)g_dma_pool_next;
+  uintptr_t raw=(uintptr_t)g_dma_desc_next;
   constexpr uintptr_t align=alignof(dma_desc);
   raw=(raw+align-1u)&~(align-1u);
   char* aligned=(char*)raw;
-  if (aligned + sizeof(dma_desc) > g_dma_pool_end){ return nullptr; }
-  g_dma_pool_next = aligned + sizeof(dma_desc);
+  if (aligned + sizeof(dma_desc) > g_dma_buf_end){ return nullptr; }
+  g_dma_desc_next = aligned + sizeof(dma_desc);
   return (dma_desc*)aligned;
+}
+
+extern "C" void* dma_alloc_buffer(size_t len, size_t align) {
+  if (len == 0) return nullptr;
+  if (align == 0) align = 1;
+  if ((align & (align - 1u)) != 0) return nullptr;  // must be power-of-two
+
+  uintptr_t end = reinterpret_cast<uintptr_t>(g_dma_buf_end);
+  if (end < len) return nullptr;
+  uintptr_t start = end - len;
+  start &= ~(static_cast<uintptr_t>(align) - 1u);  // align down
+
+  uintptr_t desc_next = reinterpret_cast<uintptr_t>(g_dma_desc_next);
+  if (start < desc_next) return nullptr;
+
+  g_dma_buf_end = reinterpret_cast<char*>(start);
+  return reinterpret_cast<void*>(start);
 }
 
 extern "C" int dma_submit_memcpy(void* dst, const void* src, size_t len, dma_cb_t cb, void* user){
@@ -149,12 +213,13 @@ extern "C" void dma_poll_complete(void){
     if (len) {
       // --- Begin non-coherent DMA model ---
       // Device reads |src| from memory: caller must have prepared it.
-      dma_memcpy(dst, src, len);
+      void* dev_dst = dma_device_view(dst, len);
+      const void* dev_src = dma_device_view(src, len);
+      dma_memcpy(dev_dst, dev_src, len);
 
-      // Our "device" is software running on the CPU, so the stores above land
-      // in the CPU cache. Clean to PoC to model a device that writes memory
-      // directly (so a later invalidate doesn't drop dirty lines).
-      if (dma_cache_maint_allowed(dst, len)) {
+      // Fallback: if the device wrote via the cacheable mapping, ensure the
+      // data hits memory before invalidation drops dirty lines.
+      if (dev_dst == dst && dma_cache_maint_allowed(dst, len)) {
         dc_cvac_range(dst, len);
       }
 

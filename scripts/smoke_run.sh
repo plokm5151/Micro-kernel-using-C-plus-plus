@@ -122,6 +122,11 @@ for message in "${required_messages[@]}"; do
     exit 1
   fi
 done
+
+if ! grep -Eq '\\[dma-policy\\][[:space:]]+(CACHEABLE|NONCACHEABLE)([[:space:]]|$)' "${LOG_PATH}"; then
+  echo "::error ::Missing expected DMA policy line: [dma-policy] CACHEABLE|NONCACHEABLE"
+  exit 1
+fi
 echo "[smoke] Boot messages OK."
 
 # IRQ 信標與心跳檢查

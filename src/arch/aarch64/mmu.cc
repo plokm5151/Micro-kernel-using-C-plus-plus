@@ -36,13 +36,16 @@ static inline void ic_iallu() { asm volatile("ic iallu"); }
 
 constexpr uint64_t kAttrIdxNormal = 0;
 constexpr uint64_t kAttrIdxDevice = 1;
+constexpr uint64_t kAttrIdxNormalNc = 2;
 
 constexpr uint64_t kMairAttrNormalWbWa = 0xFF;  // Outer+Inner WBWA.
 constexpr uint64_t kMairAttrDevice_nGnRE = 0x04;
+constexpr uint64_t kMairAttrNormalNc = 0x44;    // Outer+Inner Non-cacheable.
 
 static inline uint64_t mair_value() {
   return (kMairAttrNormalWbWa << (8 * kAttrIdxNormal)) |
-         (kMairAttrDevice_nGnRE << (8 * kAttrIdxDevice));
+         (kMairAttrDevice_nGnRE << (8 * kAttrIdxDevice)) |
+         (kMairAttrNormalNc << (8 * kAttrIdxNormalNc));
 }
 
 static inline uint64_t tcr_value() {
@@ -66,6 +69,17 @@ static inline uint64_t pte_table(uint64_t next_table_phys) {
   return (next_table_phys & 0x0000FFFFFFFFF000ull) | 0b11ull;
 }
 
+static inline uint64_t pte_page(uint64_t phys_base, uint64_t attr_index, uint64_t sh) {
+  constexpr uint64_t kAf = 1ull << 10;
+  constexpr uint64_t kApKernelRw = 0ull << 6;  // EL1 RW, EL0 no access.
+  return (phys_base & 0x0000FFFFFFFFF000ull) |
+         0b11ull |
+         (attr_index << 2) |
+         kApKernelRw |
+         (sh << 8) |
+         kAf;
+}
+
 static inline uint64_t pte_block(uint64_t phys_base, uint64_t attr_index, uint64_t sh) {
   constexpr uint64_t kAf = 1ull << 10;
   constexpr uint64_t kApKernelRw = 0ull << 6;  // EL1 RW, EL0 no access.
@@ -79,23 +93,89 @@ static inline uint64_t pte_block(uint64_t phys_base, uint64_t attr_index, uint64
 
 alignas(4096) static uint64_t g_l0[512];
 alignas(4096) static uint64_t g_l1[512];
+alignas(4096) static uint64_t g_l2_ram[512];
+alignas(4096) static uint64_t g_l3_dma0[512];
+alignas(4096) static uint64_t g_l3_dma1[512];
+
+extern "C" {
+extern char __dma_nc_start[];
+extern char __dma_nc_end[];
+}
+
+constexpr uintptr_t kRamBase = 0x40000000ull;
+constexpr uintptr_t kRamLimit = 0x80000000ull;  // exclusive
+constexpr uintptr_t kL2BlockSize = 1u << 21;  // 2MB
+constexpr uintptr_t kPageSize = 1u << 12;     // 4KB
+
+#if defined(DMA_WINDOW_POLICY_NONCACHEABLE) && defined(DMA_WINDOW_POLICY_CACHEABLE)
+#error "Define only one of DMA_WINDOW_POLICY_{CACHEABLE,NONCACHEABLE}"
+#endif
+#if !defined(DMA_WINDOW_POLICY_NONCACHEABLE) && !defined(DMA_WINDOW_POLICY_CACHEABLE)
+#define DMA_WINDOW_POLICY_CACHEABLE 1
+#endif
 
 static void build_identity_map() {
   for (unsigned i = 0; i < 512; ++i) {
     g_l0[i] = 0;
     g_l1[i] = 0;
+    g_l2_ram[i] = 0;
+    g_l3_dma0[i] = 0;
+    g_l3_dma1[i] = 0;
   }
+
+  constexpr uint64_t kPtePxN = 1ull << 53;
+  constexpr uint64_t kPteUxN = 1ull << 54;
 
   g_l0[0] = pte_table(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(g_l1)));
 
   // 0x00000000..0x3FFFFFFF: Device-nGnRE (MMIO window coverage).
-  uint64_t dev = pte_block(0x00000000ull, kAttrIdxDevice, /*SH*/0);
-  dev |= (1ull << 53);  // PXN
-  dev |= (1ull << 54);  // UXN
-  g_l1[0] = dev;
+  g_l1[0] = pte_block(0x00000000ull, kAttrIdxDevice, /*SH*/0) | kPtePxN | kPteUxN;
 
-  // 0x40000000..0x7FFFFFFF: Normal cacheable WBWA, Inner Shareable.
-  g_l1[1] = pte_block(0x40000000ull, kAttrIdxNormal, /*SH*/3);
+  // 0x40000000..0x7FFFFFFF: RAM region via L2 to allow per-page overrides.
+  g_l1[1] = pte_table(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(g_l2_ram)));
+
+  // 0x80000000..0xBFFFFFFF: non-cacheable alias of 0x40000000..0x7FFFFFFF.
+  g_l1[2] = pte_block(static_cast<uint64_t>(kRamBase), kAttrIdxNormalNc, /*SH*/3) | kPtePxN | kPteUxN;
+
+  const uintptr_t dma_start = reinterpret_cast<uintptr_t>(__dma_nc_start);
+  const uintptr_t dma_end = reinterpret_cast<uintptr_t>(__dma_nc_end);
+
+  for (unsigned i = 0; i < 512; ++i) {
+    uint64_t va = static_cast<uint64_t>(kRamBase) + (static_cast<uint64_t>(i) * kL2BlockSize);
+    g_l2_ram[i] = pte_block(va, kAttrIdxNormal, /*SH*/3);
+  }
+
+  if (dma_start >= kRamBase && dma_end > dma_start && dma_end <= kRamLimit) {
+    uintptr_t dma_first_block = dma_start & ~(kL2BlockSize - 1u);
+    uintptr_t dma_last_block = (dma_end - 1u) & ~(kL2BlockSize - 1u);
+
+    uintptr_t blocks[2] = {dma_first_block, dma_last_block};
+    uint64_t* l3_tables[2] = {g_l3_dma0, g_l3_dma1};
+    unsigned table_count = (dma_first_block == dma_last_block) ? 1u : 2u;
+
+    for (unsigned t = 0; t < table_count; ++t) {
+      uintptr_t block_base = blocks[t];
+      unsigned l2_index = static_cast<unsigned>((block_base - kRamBase) / kL2BlockSize);
+      uint64_t* l3 = l3_tables[t];
+
+      for (unsigned i = 0; i < 512; ++i) {
+        uintptr_t va = block_base + (static_cast<uintptr_t>(i) * kPageSize);
+        uint64_t attr = kAttrIdxNormal;
+        uint64_t xn = 0;
+
+        if (va >= dma_start && va < dma_end) {
+          xn = kPtePxN | kPteUxN;
+#if defined(DMA_WINDOW_POLICY_NONCACHEABLE)
+          attr = kAttrIdxNormalNc;
+#endif
+        }
+
+        l3[i] = pte_page(static_cast<uint64_t>(va), attr, /*SH*/3) | xn;
+      }
+
+      g_l2_ram[l2_index] = pte_table(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(l3)));
+    }
+  }
 
   dsb_ish();
 }

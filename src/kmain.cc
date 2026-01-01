@@ -25,6 +25,10 @@ extern "C" {
 #define USE_CNTP 0
 #endif
 
+#ifndef DMA_LAB_MODE
+#define DMA_LAB_MODE 0
+#endif
+
 namespace {
 constexpr char kHexDigits[] = "0123456789abcdef";
 
@@ -88,6 +92,11 @@ extern "C" void kmain() {
   // 構建指紋 (timestamp)
   uart_puts("[build] "); uart_puts(__DATE__); uart_puts(" "); uart_puts(__TIME__); uart_puts("\n");
 
+  uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");
+#if DMA_LAB_MODE
+  uart_puts("[dma-lab] mode="); uart_print_u64(static_cast<unsigned long long>(DMA_LAB_MODE)); uart_puts("\n");
+#endif
+
   // ==============================
   // DMA Self-Test
   // ==============================
@@ -101,8 +110,13 @@ extern "C" void kmain() {
   constexpr size_t k_dma_test_len = 1024;
   g_dma_len = k_dma_test_len;
 
+#if DMA_LAB_MODE
+  g_dma_src_buf = static_cast<uint8_t*>(dma_alloc_buffer(k_dma_test_len, 4096));
+  g_dma_dst_buf = static_cast<uint8_t*>(dma_alloc_buffer(k_dma_test_len, 4096));
+#else
   g_dma_src_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
   g_dma_dst_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+#endif
 
   if (!g_dma_src_buf || !g_dma_dst_buf) {
     uart_puts("[DMA] buffer allocation failed\n");

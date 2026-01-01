@@ -30,6 +30,20 @@ CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T boot/kernel.ld
 
+# DMA window mapping policy (default: CACHEABLE so coherency bugs surface).
+DMA_WINDOW_POLICY ?= CACHEABLE
+DMA_LAB_MODE ?= 0
+
+ifeq ($(DMA_WINDOW_POLICY),CACHEABLE)
+CXXFLAGS += -DDMA_WINDOW_POLICY_CACHEABLE=1
+else ifeq ($(DMA_WINDOW_POLICY),NONCACHEABLE)
+CXXFLAGS += -DDMA_WINDOW_POLICY_NONCACHEABLE=1
+else
+$(error DMA_WINDOW_POLICY must be CACHEABLE or NONCACHEABLE)
+endif
+
+CXXFLAGS += -DDMA_LAB_MODE=$(DMA_LAB_MODE)
+
 OBJS := \
   build/start.o \
   build/vectors.o \
