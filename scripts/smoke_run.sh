@@ -123,7 +123,7 @@ for message in "${required_messages[@]}"; do
   fi
 done
 
-if ! grep -Eq '\\[dma-policy\\][[:space:]]+(CACHEABLE|NONCACHEABLE)([[:space:]]|$)' "${LOG_PATH}"; then
+if ! grep -Eq '\[dma-policy\][[:space:]]+(CACHEABLE|NONCACHEABLE)([[:space:]]|$)' "${LOG_PATH}"; then
   echo "::error ::Missing expected DMA policy line: [dma-policy] CACHEABLE|NONCACHEABLE"
   exit 1
 fi
