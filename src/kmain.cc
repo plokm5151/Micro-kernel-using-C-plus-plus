@@ -1,12 +1,12 @@
 #include <stdint.h>
 #include "drivers/uart_pl011.h"
 #include "arch/cpu_local.h"
-#include "arch/gicv3.h"
 #include "arch/timer.h"
 #include "arch/irqflags.h"
 #include "arch/ctx.h"
 #include "arch/mmu.h"
 #include "kmem.h"
+#include "platform.h"
 #include "thread.h"
 #include "preempt.h"
 #include "dma.h"
@@ -67,6 +67,7 @@ static void dma_test_cb(void* user, int status) {
 }
 
 extern "C" void kmain() {
+  platform_early_init();
   uart_init();
   uart_puts("[BOOT] UART ready\n");
 
@@ -90,10 +91,17 @@ extern "C" void kmain() {
   kmem_init();
   uart_puts("[diag] kmem_init end\n");
 
-  // 構建指紋 (timestamp)
+  // Build fingerprint (timestamp)
   uart_puts("[build] "); uart_puts(__DATE__); uart_puts(" "); uart_puts(__TIME__); uart_puts("\n");
 
   uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");
+#if !DMA_LAB_MODE
+  if (!platform_full_kernel_supported()) {
+    uart_puts("[platform] "); uart_puts(platform_name());
+    uart_puts(" bring-up: IRQ controller not enabled yet; halting\n");
+    while (1) { asm volatile("wfe"); }
+  }
+#endif
 #if DMA_LAB_MODE
   uart_puts("[dma-lab] mode="); uart_print_u64(static_cast<unsigned long long>(DMA_LAB_MODE)); uart_puts("\n");
   dma_lab_run(static_cast<unsigned>(DMA_LAB_MODE));
@@ -166,7 +174,7 @@ extern "C" void kmain() {
   uart_puts("[sched] starting (coop)\n");
 
   uart_puts("[diag] gic_init\n");
-  gic_init();
+  platform_irq_init();
 
   uart_puts("[diag] timer_init_hz\n");
   timer_init_hz(1000);

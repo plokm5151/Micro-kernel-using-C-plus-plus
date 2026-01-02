@@ -18,8 +18,8 @@ int next_thread_id = 1;
 
 static void do_switch(Thread* cur, Thread* next) {
   auto* cpu = cpu_local();
-  // 統一使用「無參數版」FPSIMD API（狀態從 cpu_local()->current_thread 取得/寫回）
-  // 先保存當前 thread 的 FPSIMD，切換 current_thread，再載入新 thread 的 FPSIMD
+  // Use the no-argument FPSIMD API (state is read/written via cpu_local()->current_thread).
+  // Save current thread FPSIMD, switch current_thread, then restore next thread FPSIMD.
   fpsimd_save();
   cpu->current_thread = next;
   arch_switch(&cur->sp, next->sp);
@@ -72,7 +72,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
     sp_words[1] = second;
   };
 
-  // 對應 arch_switch 保存/復原的 x19..x30
+  // Matches arch_switch save/restore set: x19..x30.
   push_pair(0, 0);  // (x19, x20)
   push_pair(0, 0);  // (x21, x22)
   push_pair(0, 0);  // (x23, x24)
@@ -88,7 +88,7 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   t->stack_base = stack;
   t->stack_size = stack_size;
   t->budget = RR_QUANTUM_TICKS;
-  // FPSIMD 區塊已被清零：fpsimd_valid=0, vregs=0, fpcr/fpsr=0
+  // FPSIMD state was zeroed above: fpsimd_valid=0, vregs=0, fpcr/fpsr=0.
 
   uart_puts("[sched][diag] thread created id=");
   uart_print_u64(static_cast<unsigned long long>(t->id));

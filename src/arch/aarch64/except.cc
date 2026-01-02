@@ -17,7 +17,7 @@ static void puthex32(uint32_t v){
 }
 static const char* ec_name(uint32_t ec){
   switch(ec){
-    case 0x07: return "FP/ASIMD trap";   // <== 新增：對應 ESR EC=0x07
+    case 0x07: return "FP/ASIMD trap";   // ESR EC=0x07
     case 0x15: return "SVC64";
     case 0x18: return "IABT";
     case 0x24: return "DABT";

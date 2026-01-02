@@ -111,10 +111,10 @@ static bool case1_cpu_to_dev_stale_src() {
   memfill(expected, kLen, 0x80);
   int mismatch = first_mismatch(dst, expected, kLen);
   if (mismatch < 0) {
-    uart_puts("[dma-lab][1] ❌ unexpected PASS (bug did not reproduce)\n");
+    uart_puts("[dma-lab][1] ERR unexpected PASS (bug did not reproduce)\n");
     return false;
   }
-  uart_puts("[dma-lab][1] ✅ expected FAIL without clean: mismatch@");
+  uart_puts("[dma-lab][1] OK expected FAIL without clean: mismatch@");
   uart_print_u64(static_cast<unsigned long long>(mismatch));
   uart_puts("\n");
 
@@ -125,12 +125,12 @@ static bool case1_cpu_to_dev_stale_src() {
 
   mismatch = first_mismatch(dst, expected, kLen);
   if (mismatch >= 0) {
-    uart_puts("[dma-lab][1] ❌ fix failed: still mismatching@");
+    uart_puts("[dma-lab][1] ERR fix failed: still mismatching@");
     uart_print_u64(static_cast<unsigned long long>(mismatch));
     uart_puts("\n");
     return false;
   }
-  uart_puts("[dma-lab][1] ✅ fixed PASS (clean + dma_wmb)\n");
+  uart_puts("[dma-lab][1] OK fixed PASS (clean + dma_wmb)\n");
   return true;
 }
 
@@ -157,22 +157,22 @@ static bool case2_dev_to_cpu_stale_dst() {
     if (dst[i] != 0xAA) { saw_new = true; break; }
   }
   if (saw_new) {
-    uart_puts("[dma-lab][2] ❌ unexpected PASS (CPU observed device write without invalidate)\n");
+    uart_puts("[dma-lab][2] ERR unexpected PASS (CPU observed device write without invalidate)\n");
     return false;
   }
-  uart_puts("[dma-lab][2] ✅ expected FAIL without invalidate (CPU kept stale cache)\n");
+  uart_puts("[dma-lab][2] OK expected FAIL without invalidate (CPU kept stale cache)\n");
 
   // Fix: invalidate + rmb.
   invalidate_for_cpu(dst, kLen);
   for (size_t i = 0; i < kLen; ++i) {
     if (dst[i] != 0x55) {
-      uart_puts("[dma-lab][2] ❌ fix failed: dst mismatch@");
+      uart_puts("[dma-lab][2] ERR fix failed: dst mismatch@");
       uart_print_u64(static_cast<unsigned long long>(i));
       uart_puts(" val=0x"); uart_puthex64(dst[i]); uart_puts("\n");
       return false;
     }
   }
-  uart_puts("[dma-lab][2] ✅ fixed PASS (dma_rmb + invalidate)\n");
+  uart_puts("[dma-lab][2] OK fixed PASS (dma_rmb + invalidate)\n");
   return true;
 }
 
@@ -234,10 +234,10 @@ static bool case3_descriptor_stale_fields() {
   memfill(expected, kLen, 0x10);
   int mismatch = first_mismatch(dst, expected, kLen);
   if (ok || mismatch < 0) {
-    uart_puts("[dma-lab][3] ❌ unexpected PASS (descriptor bug did not reproduce)\n");
+    uart_puts("[dma-lab][3] ERR unexpected PASS (descriptor bug did not reproduce)\n");
     return false;
   }
-  uart_puts("[dma-lab][3] ✅ expected FAIL without descriptor clean (device saw len=0)\n");
+  uart_puts("[dma-lab][3] OK expected FAIL without descriptor clean (device saw len=0)\n");
 
   // Fix: clean descriptor then publish.
   clean_to_poc(desc, sizeof(LabDesc));
@@ -245,10 +245,10 @@ static bool case3_descriptor_stale_fields() {
   invalidate_for_cpu(dst, kLen);
   mismatch = first_mismatch(dst, expected, kLen);
   if (!ok || mismatch >= 0) {
-    uart_puts("[dma-lab][3] ❌ fix failed (clean + dma_wmb)\n");
+    uart_puts("[dma-lab][3] ERR fix failed (clean + dma_wmb)\n");
     return false;
   }
-  uart_puts("[dma-lab][3] ✅ fixed PASS (clean desc + dma_wmb)\n");
+  uart_puts("[dma-lab][3] OK fixed PASS (clean desc + dma_wmb)\n");
   return true;
 }
 
@@ -302,10 +302,10 @@ static bool case4_publish_ordering_head_vs_desc() {
   memfill(expected, kLen, 0x33);
   int mismatch = first_mismatch(dst, expected, kLen);
   if (ok || mismatch < 0) {
-    uart_puts("[dma-lab][4] ❌ unexpected PASS (publish ordering bug did not reproduce)\n");
+    uart_puts("[dma-lab][4] ERR unexpected PASS (publish ordering bug did not reproduce)\n");
     return false;
   }
-  uart_puts("[dma-lab][4] ✅ expected FAIL (head published but desc not cleaned)\n");
+  uart_puts("[dma-lab][4] OK expected FAIL (head published but desc not cleaned)\n");
 
   // Fix: clean desc, dma_wmb, then clean/publish head.
   clean_to_poc(desc, sizeof(LabDesc));
@@ -317,10 +317,10 @@ static bool case4_publish_ordering_head_vs_desc() {
   invalidate_for_cpu(dst, kLen);
   mismatch = first_mismatch(dst, expected, kLen);
   if (!ok || mismatch >= 0) {
-    uart_puts("[dma-lab][4] ❌ fix failed (desc clean before publish)\n");
+    uart_puts("[dma-lab][4] ERR fix failed (desc clean before publish)\n");
     return false;
   }
-  uart_puts("[dma-lab][4] ✅ fixed PASS (clean desc + dma_wmb before publish)\n");
+  uart_puts("[dma-lab][4] OK fixed PASS (clean desc + dma_wmb before publish)\n");
   return true;
 }
 
@@ -347,18 +347,18 @@ static bool case5_completion_flag_race() {
     if (*flag_vol == 1) { saw = true; break; }
   }
   if (saw) {
-    uart_puts("[dma-lab][5] ❌ unexpected PASS (saw completion without invalidate)\n");
+    uart_puts("[dma-lab][5] ERR unexpected PASS (saw completion without invalidate)\n");
     return false;
   }
-  uart_puts("[dma-lab][5] ✅ expected FAIL (stuck on stale cached flag)\n");
+  uart_puts("[dma-lab][5] OK expected FAIL (stuck on stale cached flag)\n");
 
   // Fix: invalidate flag line then read.
   invalidate_for_cpu(flag, sizeof(uint32_t));
   if (*flag_vol != 1) {
-    uart_puts("[dma-lab][5] ❌ fix failed: still not seeing completion\n");
+    uart_puts("[dma-lab][5] ERR fix failed: still not seeing completion\n");
     return false;
   }
-  uart_puts("[dma-lab][5] ✅ fixed PASS (dma_rmb + invalidate)\n");
+  uart_puts("[dma-lab][5] OK fixed PASS (dma_rmb + invalidate)\n");
   return true;
 }
 
@@ -394,10 +394,10 @@ static bool case6_cacheline_sharing_hazard() {
   dc_ivac_range(buf, len);  // drops dirty guard because it shares the line
 
   if (*guard == 0xCC) {
-    uart_puts("[dma-lab][6] ❌ unexpected PASS (guard survived invalidate)\n");
+    uart_puts("[dma-lab][6] ERR unexpected PASS (guard survived invalidate)\n");
     return false;
   }
-  uart_puts("[dma-lab][6] ✅ expected FAIL: guard lost due to line invalidate\n");
+  uart_puts("[dma-lab][6] OK expected FAIL: guard lost due to line invalidate\n");
 
   // --- Fix: put DMA buffer on a separate cache line ---
   auto* base2 = static_cast<uint8_t*>(kmem_alloc_aligned(line * 2, line));
@@ -419,18 +419,18 @@ static bool case6_cacheline_sharing_hazard() {
   dc_ivac_range(buf2, len2);
 
   if (*guard2 != 0xCC) {
-    uart_puts("[dma-lab][6] ❌ fix failed: guard corrupted\n");
+    uart_puts("[dma-lab][6] ERR fix failed: guard corrupted\n");
     return false;
   }
   for (size_t i = 0; i < len2; ++i) {
     if (buf2[i] != 0x7E) {
-      uart_puts("[dma-lab][6] ❌ fix failed: buffer mismatch@");
+      uart_puts("[dma-lab][6] ERR fix failed: buffer mismatch@");
       uart_print_u64(static_cast<unsigned long long>(i));
       uart_puts("\n");
       return false;
     }
   }
-  uart_puts("[dma-lab][6] ✅ fixed PASS (line-aligned buffer avoids sharing)\n");
+  uart_puts("[dma-lab][6] OK fixed PASS (line-aligned buffer avoids sharing)\n");
   return true;
 }
 
