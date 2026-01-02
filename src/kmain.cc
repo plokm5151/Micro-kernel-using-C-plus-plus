@@ -10,6 +10,7 @@
 #include "thread.h"
 #include "preempt.h"
 #include "dma.h"
+#include "dma_lab.h"
 
 extern "C" {
   extern char __dma_nc_start[];
@@ -95,6 +96,9 @@ extern "C" void kmain() {
   uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");
 #if DMA_LAB_MODE
   uart_puts("[dma-lab] mode="); uart_print_u64(static_cast<unsigned long long>(DMA_LAB_MODE)); uart_puts("\n");
+  dma_lab_run(static_cast<unsigned>(DMA_LAB_MODE));
+  uart_puts("[dma-lab] halting\n");
+  while (1) { asm volatile("wfe"); }
 #endif
 
   // ==============================

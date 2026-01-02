@@ -57,13 +57,15 @@ the DMA window, `include/dma.h` provides strict helpers:
 
 ### DMA lab mode
 
-`DMA_LAB_MODE=1` switches the DMA self-test buffers to allocate from the DMA
-window (instead of the heap) so policy/alias experiments are easy to run.
+`DMA_LAB_MODE!=0` switches `kmain()` into a deterministic DMA coherency lab. It
+runs a suite of reproducible fail→fix cases (stale reads, descriptor publish
+ordering, completion flag polling, cache-line sharing hazards) and then halts
+instead of starting the scheduler/IRQs.
 
 Examples:
 
-- `DMA_LAB_MODE=1 DMA_WINDOW_POLICY=CACHEABLE scripts/smoke_run.sh`
-- `DMA_LAB_MODE=1 DMA_WINDOW_POLICY=NONCACHEABLE scripts/smoke_run.sh`
+- Run the full suite: `DMA_LAB_MODE=1 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
+- Run a single case (best-effort): `DMA_LAB_MODE=3 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
 
 ## Host build prerequisites
 

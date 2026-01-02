@@ -59,6 +59,7 @@ OBJS := \
   build/thread.o \
   build/preempt.o \
   build/dma.o \
+  build/dma_lab.o \
   build/except.o \
   build/fpsimd.o \
   build/kmain.o
@@ -112,6 +113,10 @@ build/preempt.o: src/preempt.cc include/preempt.h include/arch/cpu_local.h inclu
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/dma.o: src/dma.cc include/dma.h include/arch/barrier.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/dma_lab.o: src/dma_lab.cc include/dma_lab.h include/dma.h include/kmem.h include/arch/barrier.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
