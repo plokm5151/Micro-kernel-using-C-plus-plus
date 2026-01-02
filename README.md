@@ -6,6 +6,12 @@
 ./scripts/devshell.sh
 make run
 
+## Raspberry Pi 4 (bring-up)
+
+- Build image: `make rpi4`
+- Outputs: `build/kernel8.img` (firmware) and `build/kernel_rpi4.elf` (debug)
+- Instructions: `docs/rpi4.md`
+
 ## Memory layout
 The linker script at `boot/kernel.ld` exposes a handful of global symbols that
 describe the static memory map:
