@@ -30,6 +30,20 @@ CXXFLAGS:= $(COMMON) -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T boot/kernel.ld
 
+# DMA window mapping policy (default: CACHEABLE so coherency bugs surface).
+DMA_WINDOW_POLICY ?= CACHEABLE
+DMA_LAB_MODE ?= 0
+
+ifeq ($(DMA_WINDOW_POLICY),CACHEABLE)
+CXXFLAGS += -DDMA_WINDOW_POLICY_CACHEABLE=1
+else ifeq ($(DMA_WINDOW_POLICY),NONCACHEABLE)
+CXXFLAGS += -DDMA_WINDOW_POLICY_NONCACHEABLE=1
+else
+$(error DMA_WINDOW_POLICY must be CACHEABLE or NONCACHEABLE)
+endif
+
+CXXFLAGS += -DDMA_LAB_MODE=$(DMA_LAB_MODE)
+
 OBJS := \
   build/start.o \
   build/vectors.o \
@@ -38,12 +52,14 @@ OBJS := \
   build/ctx.o \
   build/cpu_local.o \
   build/barrier.o \
+  build/mmu.o \
   build/timer.o \
   build/irq.o \
   build/kmem.o \
   build/thread.o \
   build/preempt.o \
   build/dma.o \
+  build/dma_lab.o \
   build/except.o \
   build/fpsimd.o \
   build/kmain.o
@@ -100,6 +116,10 @@ build/dma.o: src/dma.cc include/dma.h include/arch/barrier.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
+build/dma_lab.o: src/dma_lab.cc include/dma_lab.h include/dma.h include/kmem.h include/arch/barrier.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
 build/except.o: src/arch/aarch64/except.cc include/arch/except.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
@@ -114,6 +134,10 @@ build/kmain.o: src/kmain.cc
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 build/barrier.o: src/arch/aarch64/barrier.cc include/arch/barrier.h
+	mkdir -p build
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+build/mmu.o: src/arch/aarch64/mmu.cc include/arch/mmu.h
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 

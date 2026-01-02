@@ -5,10 +5,12 @@
 #include "arch/timer.h"
 #include "arch/irqflags.h"
 #include "arch/ctx.h"
+#include "arch/mmu.h"
 #include "kmem.h"
 #include "thread.h"
 #include "preempt.h"
 #include "dma.h"
+#include "dma_lab.h"
 
 extern "C" {
   extern char __dma_nc_start[];
@@ -22,6 +24,10 @@ extern "C" {
 #endif
 #ifndef USE_CNTP
 #define USE_CNTP 0
+#endif
+
+#ifndef DMA_LAB_MODE
+#define DMA_LAB_MODE 0
 #endif
 
 namespace {
@@ -64,6 +70,18 @@ extern "C" void kmain() {
   uart_init();
   uart_puts("[BOOT] UART ready\n");
 
+  uart_puts("[mmu] enabling...\n");
+  mmu_init(true);
+
+  uint64_t sctlr = 0;
+  asm volatile("mrs %0, sctlr_el1" : "=r"(sctlr));
+  uart_puts("[mmu] enabled sctlr=0x"); uart_puthex64(sctlr);
+  uart_puts(" (C="); uart_putc((sctlr & (1u << 2)) ? '1' : '0');
+  uart_puts(", I="); uart_putc((sctlr & (1u << 12)) ? '1' : '0');
+  uart_puts(", M="); uart_putc((sctlr & (1u << 0)) ? '1' : '0');
+  uart_puts(")\n");
+  mmu_dump_state();
+
   uart_puts("[diag] cpu_local_boot_init begin\n");
   cpu_local_boot_init();
   uart_puts("[diag] cpu_local_boot_init end\n");
@@ -74,6 +92,14 @@ extern "C" void kmain() {
 
   // 構建指紋 (timestamp)
   uart_puts("[build] "); uart_puts(__DATE__); uart_puts(" "); uart_puts(__TIME__); uart_puts("\n");
+
+  uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");
+#if DMA_LAB_MODE
+  uart_puts("[dma-lab] mode="); uart_print_u64(static_cast<unsigned long long>(DMA_LAB_MODE)); uart_puts("\n");
+  dma_lab_run(static_cast<unsigned>(DMA_LAB_MODE));
+  uart_puts("[dma-lab] halting\n");
+  while (1) { asm volatile("wfe"); }
+#endif
 
   // ==============================
   // DMA Self-Test
@@ -88,8 +114,13 @@ extern "C" void kmain() {
   constexpr size_t k_dma_test_len = 1024;
   g_dma_len = k_dma_test_len;
 
+#if DMA_LAB_MODE
+  g_dma_src_buf = static_cast<uint8_t*>(dma_alloc_buffer(k_dma_test_len, 4096));
+  g_dma_dst_buf = static_cast<uint8_t*>(dma_alloc_buffer(k_dma_test_len, 4096));
+#else
   g_dma_src_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
   g_dma_dst_buf = static_cast<uint8_t*>(kmem_alloc_aligned(k_dma_test_len, 4096));
+#endif
 
   if (!g_dma_src_buf || !g_dma_dst_buf) {
     uart_puts("[DMA] buffer allocation failed\n");

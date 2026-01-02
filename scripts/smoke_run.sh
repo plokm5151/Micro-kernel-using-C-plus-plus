@@ -22,6 +22,48 @@ if ! make -j; then
 fi
 
 mkdir -p "${BUILD_DIR}"
+
+# Static checks (fast, deterministic).
+echo "[smoke] Verifying dma_* barriers use OSH..."
+CLANG=""
+for c in clang-20 clang-19 clang-18 clang-17 clang-16 clang-15 clang-14 clang; do
+  if command -v "${c}" >/dev/null 2>&1; then
+    CLANG="${c}"
+    break
+  fi
+done
+if [[ -z "${CLANG}" ]]; then
+  echo "::error ::clang not found in PATH; cannot run static barrier verification"
+  exit 2
+fi
+
+DMA_CHECK_C="${BUILD_DIR}/__dma_barrier_check.c"
+DMA_CHECK_S="${BUILD_DIR}/__dma_barrier_check.S"
+cat >"${DMA_CHECK_C}" <<'EOF'
+#include "arch/barrier.h"
+__attribute__((used)) void __verify_dma_barriers(void) {
+  dma_wmb();
+  dma_rmb();
+  dma_mb();
+}
+EOF
+if ! "${CLANG}" -target aarch64-unknown-none -ffreestanding -O2 -S -Iinclude -Isrc "${DMA_CHECK_C}" -o "${DMA_CHECK_S}"; then
+  echo "::error ::Failed to compile DMA barrier check to assembly"
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*dmb[[:space:]]+oshst([[:space:]]|$)' "${DMA_CHECK_S}"; then
+  echo "::error ::dma_wmb() did not lower to 'dmb oshst'"
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*dmb[[:space:]]+oshld([[:space:]]|$)' "${DMA_CHECK_S}"; then
+  echo "::error ::dma_rmb() did not lower to 'dmb oshld'"
+  exit 1
+fi
+if ! grep -qE '^[[:space:]]*dmb[[:space:]]+osh([[:space:]]|$)' "${DMA_CHECK_S}"; then
+  echo "::error ::dma_mb() did not lower to 'dmb osh'"
+  exit 1
+fi
+
 : >"${LOG_PATH}"
 : >"${TRACE_LOG}"
 
@@ -53,6 +95,13 @@ if [[ ${status} -ne 0 ]]; then
   exit "${status}"
 fi
 
+# Fail fast if QEMU logged guest_errors/unimp output.
+if [[ -s "${TRACE_LOG}" ]] && grep -Eq '(^unimp([[:space:]:]|$)|unimp:|unimplemented|guest[_[:space:]]+error|guest_errors)' "${TRACE_LOG}"; then
+  echo "::error ::QEMU produced guest_errors/unimp logs (see ${TRACE_LOG})"
+  tail -n 50 "${TRACE_LOG}" || true
+  exit 1
+fi
+
 # NEW: fail fast if any exception was logged.
 if grep -qF "[EXC]" "${LOG_PATH}"; then
   echo "::error ::Exception detected in boot log; see ESR/ELR/SPSR above"
@@ -62,6 +111,8 @@ fi
 # 基本啟動訊息
 required_messages=(
   "[BOOT] UART ready"
+  "[mmu] enabled"
+  "(C=1, I=1, M=1)"
   "Timer IRQ armed @1kHz"
   "[sched] starting (coop)"
 )
@@ -71,6 +122,11 @@ for message in "${required_messages[@]}"; do
     exit 1
   fi
 done
+
+if ! grep -Eq '\[dma-policy\][[:space:]]+(CACHEABLE|NONCACHEABLE)([[:space:]]|$)' "${LOG_PATH}"; then
+  echo "::error ::Missing expected DMA policy line: [dma-policy] CACHEABLE|NONCACHEABLE"
+  exit 1
+fi
 echo "[smoke] Boot messages OK."
 
 # IRQ 信標與心跳檢查

@@ -22,8 +22,50 @@ describe the static memory map:
   aligned to 4 KiB boundaries so later MMU attributes can be applied without
   splitting pages.
 - `__dma_nc_start`..`__dma_nc_end` describe a 128 KB window set aside for
-  non-cacheable DMA buffers. The 4 KiB alignment matches page granularity,
-  simplifying future cache maintenance and memory attribute updates.
+  DMA experiments. The symbol name is historical: the mapping policy for this
+  window is configurable (cacheable vs non-cacheable) so coherency bugs can be
+  reproduced and fixed properly. The 4 KiB alignment matches page granularity,
+  simplifying cache maintenance and memory attribute updates.
+
+## MMU, caches, and DMA coherency
+
+The kernel enables the EL1 MMU and I/D caches early in `src/kmain.cc`, and the
+boot log prints the resulting `SCTLR_EL1` bits (expect `C=1, I=1, M=1`). This is
+required for the cache-maintenance-based non-coherent DMA model used by the DMA
+self-test.
+
+### DMA window policy
+
+Build-time knobs (see `Makefile`):
+
+- `DMA_WINDOW_POLICY=CACHEABLE` (default): `__dma_nc_start`..`__dma_nc_end` are
+  mapped as Normal WBWA (cacheable). DMA requires explicit cache maintenance;
+  this is the default to surface coherency bugs.
+- `DMA_WINDOW_POLICY=NONCACHEABLE`: the same window is mapped as Normal
+  non-cacheable (control group).
+
+The boot log prints the active policy as `[dma-policy] CACHEABLE|NONCACHEABLE`.
+
+### Non-cacheable alias mapping
+
+RAM is also mapped through a non-cacheable alias (VA offset `+0x40000000`, i.e.
+`0x80000000..0xBFFFFFFF` aliases `0x40000000..0x7FFFFFFF`). For buffers inside
+the DMA window, `include/dma.h` provides strict helpers:
+
+- `dma_window_to_nocache_alias(p, len)`
+- `dma_window_from_nocache_alias(p, len)`
+
+### DMA lab mode
+
+`DMA_LAB_MODE!=0` switches `kmain()` into a deterministic DMA coherency lab. It
+runs a suite of reproducible fail→fix cases (stale reads, descriptor publish
+ordering, completion flag polling, cache-line sharing hazards) and then halts
+instead of starting the scheduler/IRQs.
+
+Examples:
+
+- Run the full suite: `DMA_LAB_MODE=1 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
+- Run a single case (best-effort): `DMA_LAB_MODE=3 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
 
 ## Host build prerequisites
 
