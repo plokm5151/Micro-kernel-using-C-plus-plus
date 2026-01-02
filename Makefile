@@ -33,7 +33,7 @@ START_SRC ?= boot/start.S
 LDSCRIPT ?= boot/kernel.ld
 
 COMMON  := -target aarch64-unknown-none -ffreestanding -fno-stack-protector -O2 -g
-# 暫時關閉自動向量化（等 FPSIMD context 完整驗證後可移除）
+# Temporarily disable auto-vectorization (remove once FPSIMD context is fully validated).
 CXXFLAGS:= $(COMMON) -std=c++17 -fno-exceptions -fno-rtti -Wall -Wextra -DARM_TIMER_DIAG=1 -DUSE_CNTP=0 -fno-vectorize -fno-slp-vectorize
 ASFLAGS := -target aarch64-unknown-none -ffreestanding
 LDFLAGS := -nostdlib -static -T $(LDSCRIPT)

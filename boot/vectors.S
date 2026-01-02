@@ -32,7 +32,7 @@ __vec_base:
   .balign 0x80                // SError EL0_64
   b sync_el0_64
 
-  // --- IRQ frame layout 與 irq_el1 保持原樣 ---
+  // --- Keep IRQ frame layout and irq_el1 unchanged ---
   .equ IRQ_FRAME_SIZE, 192
   .equ IRQ_FRAME_X0, 0
   .equ IRQ_FRAME_X2, 16
@@ -103,7 +103,7 @@ irq_el1:
 
   .extern except_el1_sync
 
-// --- 極簡同步例外轉印到 C ---
+// --- Minimal synchronous exception trampoline to C ---
 sync_el1h:
   mrs x0, esr_el1
   mrs x1, elr_el1

@@ -6,7 +6,7 @@ struct Thread;
 
 struct alignas(64) cpu_local {
   uintptr_t irq_stack_top;   // points to __irq_stack_cpu0_top for CPU0
-  Thread*   current_thread;  // 目前執行緒
+  Thread*   current_thread;  // currently running thread
   unsigned  preempt_cnt;     // preemption nesting counter
   unsigned  need_resched;    // scheduler should pick another thread
   unsigned long ticks;       // timer tick counter

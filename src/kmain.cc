@@ -91,7 +91,7 @@ extern "C" void kmain() {
   kmem_init();
   uart_puts("[diag] kmem_init end\n");
 
-  // 構建指紋 (timestamp)
+  // Build fingerprint (timestamp)
   uart_puts("[build] "); uart_puts(__DATE__); uart_puts(" "); uart_puts(__TIME__); uart_puts("\n");
 
   uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");

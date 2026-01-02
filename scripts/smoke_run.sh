@@ -108,7 +108,7 @@ if grep -qF "[EXC]" "${LOG_PATH}"; then
   exit 1
 fi
 
-# 基本啟動訊息
+# Basic boot messages
 required_messages=(
   "[BOOT] UART ready"
   "[mmu] enabled"
@@ -129,7 +129,7 @@ if ! grep -Eq '\[dma-policy\][[:space:]]+(CACHEABLE|NONCACHEABLE)([[:space:]]|$)
 fi
 echo "[smoke] Boot messages OK."
 
-# IRQ 信標與心跳檢查
+# IRQ beacon and heartbeat checks
 flat_log=$(tr -d $'\n' < "${LOG_PATH}")
 if ! grep -qF '!' "${LOG_PATH}"; then
   echo "::error ::No IRQ entries seen ('!'): check GIC init or msr daifclr,#2"
@@ -144,7 +144,7 @@ if ! printf '%s' "${flat_log}" | grep -q '\.'; then
   exit 1
 fi
 
-# RR/搶佔輸出
+# RR / preemption output
 if ! printf '%s' "${flat_log}" | grep -q 'A.*a'; then
   echo "::error ::Missing expected scheduler evidence: A then a (interleaving allowed)"
   exit 1
@@ -163,7 +163,7 @@ if ! printf '%s' "${flat_log}" | grep -q 'a[^b]*a'; then
 fi
 echo "[smoke] Scheduler output verified."
 
-# DMA 驗收（一定要看到）
+# DMA validation (must see)
 if grep -qF "[DMA FAIL]" "${LOG_PATH}"; then
   echo "::error ::DMA self-test reported failure"
   exit 1

@@ -4,8 +4,11 @@
 
 #include <stdint.h>
 
-// 這份實作不做 lazy enable，因為我們已在 boot/start.S 打開 CPACR_EL1.FPEN=0b11。
-// 注意：本檔會用到 q0..q31 指令，請勿用 -mgeneral-regs-only 編譯本檔。
+// This implementation does not do lazy enable because boot/start.S already sets
+// CPACR_EL1.FPEN=0b11.
+//
+// NOTE: This file uses q0..q31 instructions; do not compile it with
+// -mgeneral-regs-only.
 
 extern "C" void fpsimd_save(void) {
   auto* cpu = cpu_local();
@@ -50,7 +53,8 @@ extern "C" void fpsimd_load(void) {
   if (!cpu || !cpu->current_thread) return;
   Thread* t = cpu->current_thread;
 
-  // 若尚未存過，先清零 q-reg（保險；一般情況 thread 剛建立時為 0）
+  // If the thread hasn't saved FPSIMD state yet, clear q-regs (defensive; new
+  // threads typically start at zero anyway).
   if (!t->fpsimd_valid) {
     asm volatile(
         "eor v0.16b,  v0.16b,  v0.16b\n\t"
