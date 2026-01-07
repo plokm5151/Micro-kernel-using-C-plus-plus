@@ -111,6 +111,7 @@ OBJS := \
   $(OBJ_DIR)/mmu.o \
   $(OBJ_DIR)/timer.o \
   $(OBJ_DIR)/irq.o \
+  $(OBJ_DIR)/libc.o \
   $(OBJ_DIR)/kmem.o \
   $(OBJ_DIR)/mem_pool.o \
   $(OBJ_DIR)/mem_lab.o \
@@ -161,6 +162,10 @@ $(OBJ_DIR)/timer.o: src/arch/aarch64/timer.cc include/arch/timer.h
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 $(OBJ_DIR)/irq.o: src/irq.cc include/irq.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(OBJ_DIR)/libc.o: src/libc.cc
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
