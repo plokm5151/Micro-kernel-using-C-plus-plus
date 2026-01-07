@@ -13,6 +13,7 @@
 #include "dma_lab.h"
 #include "mem_lab.h"
 #include "sync_lab.h"
+#include "stack_lab.h"
 
 extern "C" {
   extern char __dma_nc_start[];
@@ -38,6 +39,14 @@ extern "C" {
 
 #ifndef MEM_LAB_MODE
 #define MEM_LAB_MODE 0
+#endif
+
+#ifndef STACK_LAB_MODE
+#define STACK_LAB_MODE 0
+#endif
+
+#if SYNC_LAB_MODE && STACK_LAB_MODE
+#error "Enable only one of SYNC_LAB_MODE or STACK_LAB_MODE"
 #endif
 
 namespace {
@@ -190,6 +199,9 @@ extern "C" void kmain() {
 #endif
   uart_puts("[sync-lab] mode="); uart_print_u64(static_cast<unsigned long long>(SYNC_LAB_MODE)); uart_puts("\n");
   sync_lab_setup(static_cast<unsigned>(SYNC_LAB_MODE));
+#elif STACK_LAB_MODE
+  uart_puts("[stack-lab] mode="); uart_print_u64(static_cast<unsigned long long>(STACK_LAB_MODE)); uart_puts("\n");
+  stack_lab_setup(static_cast<unsigned>(STACK_LAB_MODE));
 #else
   uart_puts("[diag] thread_create a\n");
   Thread* ta = thread_create(a, reinterpret_cast<void*>(0xA), 16 * 1024);

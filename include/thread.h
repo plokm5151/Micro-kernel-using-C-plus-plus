@@ -19,6 +19,7 @@ struct Thread {
   int        effective_priority;  // may be boosted by priority inheritance
   int        state;               // 0=READY, 1=BLOCKED
   Thread*    wait_next;           // used by wait-queues (mutex/semaphore)
+  mutex*     waiting_on;          // mutex this thread is blocked on (for lockdep)
   mutex*     owned_mutexes;       // list head for priority inheritance
 
   // ---- FPSIMD context ----

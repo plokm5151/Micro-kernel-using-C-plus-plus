@@ -5,8 +5,46 @@
 #include "preempt.h"
 
 namespace {
+#ifndef SYNC_LAB_MODE
+#define SYNC_LAB_MODE 0
+#endif
+
 #ifndef MUTEX_PI
 #define MUTEX_PI 1
+#endif
+
+#if SYNC_LAB_MODE == 5
+#define LOCKDEP_ENABLED 1
+#else
+#define LOCKDEP_ENABLED 0
+#endif
+
+#if LOCKDEP_ENABLED
+static void lockdep_panic_deadlock(Thread* cur, mutex* m) {
+  uart_puts("[lockdep] deadlock cycle detected: tid=");
+  uart_print_u64(static_cast<unsigned long long>(cur ? cur->id : -1));
+  uart_puts(" waiting_on=0x");
+  uart_print_u64(static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(m)));
+  uart_puts("\n");
+  uart_puts("[lockdep] result PASS\n");
+  while (1) {
+    asm volatile("wfe");
+  }
+}
+
+static bool lockdep_would_deadlock(Thread* cur, mutex* m) {
+  if (!cur || !m) return false;
+  Thread* owner = m->owner;
+  // Walk the owner -> waiting_on -> owner chain looking for a cycle to |cur|.
+  // This is sufficient to catch classic AB/BA deadlocks and small cycles.
+  for (unsigned depth = 0; owner && depth < 16u; ++depth) {
+    if (owner == cur) return true;
+    mutex* wait = owner->waiting_on;
+    if (!wait) break;
+    owner = wait->owner;
+  }
+  return false;
+}
 #endif
 
 static Thread* waitq_pop_highest(Thread** head) {
@@ -120,6 +158,7 @@ extern "C" void mutex_lock(mutex* m) {
 
     if (m->owner == cur) {
       // Already the owner (non-recursive mutex); treat as acquired.
+      cur->waiting_on = nullptr;
       preempt_enable();
       return;
     }
@@ -127,11 +166,19 @@ extern "C" void mutex_lock(mutex* m) {
     if (m->owner == nullptr) {
       m->owner = cur;
       thread_owned_mutex_add(cur, m);
+      cur->waiting_on = nullptr;
       preempt_enable();
       return;
     }
 
+#if LOCKDEP_ENABLED
+    if (lockdep_would_deadlock(cur, m)) {
+      lockdep_panic_deadlock(cur, m);
+    }
+#endif
+
     // Block.
+    cur->waiting_on = m;
     cur->wait_next = m->waiters;
     m->waiters = cur;
     mutex_apply_pi(m);
@@ -140,6 +187,35 @@ extern "C" void mutex_lock(mutex* m) {
     cpu->need_resched = 1;
     preempt_enable();
   }
+}
+
+extern "C" int mutex_trylock(mutex* m) {
+  if (!m) return -1;
+
+  preempt_disable();
+  auto* cpu = cpu_local();
+  Thread* cur = cpu ? cpu->current_thread : nullptr;
+  if (!cur) {
+    preempt_enable();
+    return -1;
+  }
+
+  if (m->owner == nullptr) {
+    m->owner = cur;
+    thread_owned_mutex_add(cur, m);
+    cur->waiting_on = nullptr;
+    preempt_enable();
+    return 0;
+  }
+
+  if (m->owner == cur) {
+    cur->waiting_on = nullptr;
+    preempt_enable();
+    return 0;
+  }
+
+  preempt_enable();
+  return -1;
 }
 
 extern "C" void mutex_unlock(mutex* m) {
@@ -158,6 +234,7 @@ extern "C" void mutex_unlock(mutex* m) {
   Thread* next_owner = waitq_pop_highest(&m->waiters);
   if (next_owner) {
     m->owner = next_owner;
+    next_owner->waiting_on = nullptr;
     thread_owned_mutex_add(next_owner, m);
     sched_make_runnable(next_owner);
     mutex_apply_pi(m);
@@ -195,6 +272,7 @@ extern "C" void sem_down(semaphore* s) {
     return;
   }
 
+  cur->waiting_on = nullptr;
   cur->wait_next = s->waiters;
   s->waiters = cur;
   sched_block_current();

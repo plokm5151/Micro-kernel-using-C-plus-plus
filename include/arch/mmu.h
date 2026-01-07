@@ -8,3 +8,10 @@ void mmu_init(bool enable);
 
 // Dump key EL1 system registers to the UART for diagnostics.
 void mmu_dump_state();
+
+// Return 1 if EL1 stage-1 translation is enabled.
+int mmu_enabled(void);
+
+// Mark the 4 KiB page containing |addr| as invalid (guard page).
+// Returns 0 on success, -1 on unsupported address/state.
+int mmu_guard_page(void* addr);

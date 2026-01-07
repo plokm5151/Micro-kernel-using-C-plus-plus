@@ -54,6 +54,9 @@ SYNC_LAB_MODE ?= 0
 # Memory allocator / fragmentation lab mode (default: off).
 MEM_LAB_MODE ?= 0
 
+# Stack guard-page lab mode (default: off).
+STACK_LAB_MODE ?= 0
+
 # Platform selection.
 # - virt: QEMU -machine virt (default, used by CI smoke test)
 # - rpi4: Raspberry Pi 4 (AArch64 firmware-loaded kernel8.img)
@@ -98,6 +101,7 @@ endif
 CXXFLAGS += -DMUTEX_PI=$(MUTEX_PI)
 CXXFLAGS += -DSYNC_LAB_MODE=$(SYNC_LAB_MODE)
 CXXFLAGS += -DMEM_LAB_MODE=$(MEM_LAB_MODE)
+CXXFLAGS += -DSTACK_LAB_MODE=$(STACK_LAB_MODE)
 
 OBJS := \
   $(OBJ_DIR)/start.o \
@@ -121,6 +125,7 @@ OBJS := \
   $(OBJ_DIR)/dma.o \
   $(OBJ_DIR)/dma_lab.o \
   $(OBJ_DIR)/sync_lab.o \
+  $(OBJ_DIR)/stack_lab.o \
   $(OBJ_DIR)/except.o \
   $(OBJ_DIR)/fpsimd.o \
   $(OBJ_DIR)/kmain.o
@@ -202,6 +207,10 @@ $(OBJ_DIR)/dma_lab.o: src/dma_lab.cc include/dma_lab.h include/dma.h include/kme
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 $(OBJ_DIR)/sync_lab.o: src/sync_lab.cc include/sync_lab.h include/sync.h include/thread.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(OBJ_DIR)/stack_lab.o: src/stack_lab.cc include/stack_lab.h include/thread.h include/arch/cpu_local.h
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
