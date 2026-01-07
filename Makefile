@@ -51,6 +51,9 @@ MUTEX_PI ?= 1
 # Synchronization/scheduler lab mode (default: off).
 SYNC_LAB_MODE ?= 0
 
+# Memory allocator / fragmentation lab mode (default: off).
+MEM_LAB_MODE ?= 0
+
 # Platform selection.
 # - virt: QEMU -machine virt (default, used by CI smoke test)
 # - rpi4: Raspberry Pi 4 (AArch64 firmware-loaded kernel8.img)
@@ -94,6 +97,7 @@ endif
 
 CXXFLAGS += -DMUTEX_PI=$(MUTEX_PI)
 CXXFLAGS += -DSYNC_LAB_MODE=$(SYNC_LAB_MODE)
+CXXFLAGS += -DMEM_LAB_MODE=$(MEM_LAB_MODE)
 
 OBJS := \
   $(OBJ_DIR)/start.o \
@@ -108,6 +112,8 @@ OBJS := \
   $(OBJ_DIR)/timer.o \
   $(OBJ_DIR)/irq.o \
   $(OBJ_DIR)/kmem.o \
+  $(OBJ_DIR)/mem_pool.o \
+  $(OBJ_DIR)/mem_lab.o \
   $(OBJ_DIR)/sync.o \
   $(OBJ_DIR)/thread.o \
   $(OBJ_DIR)/preempt.o \
@@ -159,6 +165,14 @@ $(OBJ_DIR)/irq.o: src/irq.cc include/irq.h
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 $(OBJ_DIR)/kmem.o: src/kmem.cc include/kmem.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(OBJ_DIR)/mem_pool.o: src/mem_pool.cc include/mem_pool.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(OBJ_DIR)/mem_lab.o: src/mem_lab.cc include/mem_lab.h include/mem_pool.h include/kmem.h
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 

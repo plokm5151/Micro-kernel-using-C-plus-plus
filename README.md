@@ -29,6 +29,10 @@ All knobs are Make variables:
 - `PLATFORM=virt|rpi4` (default: `virt`)
 - `DMA_WINDOW_POLICY=CACHEABLE|NONCACHEABLE` (default: `CACHEABLE`)
 - `DMA_LAB_MODE=0|1|2|...` (default: `0`)
+- `SCHED_POLICY=RR|PRIO` (default: `RR`)
+- `MUTEX_PI=0|1` (default: `1`)
+- `SYNC_LAB_MODE=0|1|...` (default: `0`)
+- `MEM_LAB_MODE=0|1` (default: `0`)
 - `RPI4_UART_CLOCK_HZ=<hz>` (only used when building `PLATFORM=rpi4`)
 
 ## Memory layout
@@ -51,6 +55,8 @@ describe the static memory map:
   window is configurable (cacheable vs non-cacheable) so coherency bugs can be
   reproduced and fixed properly. The 4 KiB alignment matches page granularity,
   simplifying cache maintenance and memory attribute updates.
+
+Additional memory allocator + fragmentation notes: `docs/memory.md`.
 
 ## MMU, caches, and DMA coherency
 
