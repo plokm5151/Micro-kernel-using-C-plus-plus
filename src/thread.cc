@@ -3,8 +3,10 @@
 #include "arch/ctx.h"
 #include "arch/cpu_local.h"
 #include "arch/fpsimd.h"
+#include "arch/mmu.h"
 #include "drivers/uart_pl011.h"
 #include "kmem.h"
+#include "mem_pool.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -20,6 +22,7 @@ constexpr int kQuantumTicks = 5;
 
 constexpr uint64_t kStackGuardMagic = 0x737461636b677561ull;  // "stackgua"
 constexpr size_t kStackGuardBytes = 64;
+constexpr size_t kStackGuardPageBytes = 4096;
 constexpr uint8_t kStackWatermark = 0xA5;
 
 constexpr unsigned kNeedReschedNone = 0;
@@ -38,6 +41,14 @@ constexpr unsigned kNeedReschedRotate = 2;
 Thread* rq_head = nullptr;
 Thread* rq_tail = nullptr;
 int next_thread_id = 1;
+
+mem_pool g_thread_pool;
+int g_thread_pool_inited = 0;
+
+constexpr size_t kThreadPoolAlign = 16;
+constexpr size_t kThreadPoolBlockSize = (sizeof(Thread) + (kThreadPoolAlign - 1u)) & ~(kThreadPoolAlign - 1u);
+constexpr size_t kThreadPoolCount = 32;
+constexpr size_t kThreadPoolBytes = (kThreadPoolBlockSize * kThreadPoolCount) + kThreadPoolAlign;
 
 static inline int clamp_priority(int prio) {
   if (prio < 0) return 0;
@@ -217,6 +228,12 @@ extern "C" void sched_init(void) {
   rq_head = nullptr;
   rq_tail = nullptr;
   next_thread_id = 1;
+
+  g_thread_pool_inited = 0;
+  void* backing = kmem_alloc_aligned(kThreadPoolBytes, kThreadPoolAlign);
+  if (backing && mem_pool_init(&g_thread_pool, backing, kThreadPoolBytes, kThreadPoolBlockSize) == 0) {
+    g_thread_pool_inited = 1;
+  }
 }
 
 extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size) {
@@ -230,8 +247,13 @@ extern "C" Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t st
     return nullptr;
   }
 
-  Thread* t = reinterpret_cast<Thread*>(
-      kmem_alloc_aligned(sizeof(Thread), alignof(Thread)));
+  Thread* t = nullptr;
+  if (g_thread_pool_inited) {
+    t = reinterpret_cast<Thread*>(mem_pool_alloc(&g_thread_pool));
+  }
+  if (!t) {
+    t = reinterpret_cast<Thread*>(kmem_alloc_aligned(sizeof(Thread), alignof(Thread)));
+  }
   if (!t) {
     uart_puts("[sched][err] no memory for Thread struct\n");
     return nullptr;
@@ -242,11 +264,26 @@ extern "C" Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t st
     t_bytes[i] = 0;
   }
 
-  void* stack = kmem_alloc_aligned(stack_size, 16);
-  if (!stack) {
-    uart_puts("[sched][err] no memory for thread stack\n");
+  if (stack_size > (static_cast<size_t>(-1) - kStackGuardPageBytes)) {
+    uart_puts("[sched][err] stack too large\n");
+    if (g_thread_pool_inited && mem_pool_owns(&g_thread_pool, t)) {
+      mem_pool_free(&g_thread_pool, t);
+    }
     return nullptr;
   }
+
+  void* stack_alloc = kmem_alloc_aligned(stack_size + kStackGuardPageBytes, kStackGuardPageBytes);
+  if (!stack_alloc) {
+    uart_puts("[sched][err] no memory for thread stack\n");
+    if (g_thread_pool_inited && mem_pool_owns(&g_thread_pool, t)) {
+      mem_pool_free(&g_thread_pool, t);
+    }
+    return nullptr;
+  }
+  // Guard page lives below the usable stack region; stack grows down.
+  // If page-table manipulation fails, we still keep the guard pattern + watermark.
+  (void)mmu_guard_page(stack_alloc);
+  void* stack = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(stack_alloc) + kStackGuardPageBytes);
   stack_init_guard_and_watermark(stack, stack_size);
 
   uintptr_t stack_top = reinterpret_cast<uintptr_t>(stack) + stack_size;
@@ -279,6 +316,7 @@ extern "C" Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t st
   t->effective_priority = t->base_priority;
   t->state = kThreadReady;
   t->wait_next = nullptr;
+  t->waiting_on = nullptr;
   t->owned_mutexes = nullptr;
   // FPSIMD state was zeroed above: fpsimd_valid=0, vregs=0, fpcr/fpsr=0.
 

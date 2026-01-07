@@ -34,6 +34,9 @@ static inline void write_sctlr_el1(uint64_t v){ asm volatile("msr sctlr_el1, %0"
 static inline void tlbi_vmalle1() { asm volatile("tlbi vmalle1"); }
 static inline void ic_iallu() { asm volatile("ic iallu"); }
 
+constexpr uint64_t kPtePxN = 1ull << 53;
+constexpr uint64_t kPteUxN = 1ull << 54;
+
 constexpr uint64_t kAttrIdxNormal = 0;
 constexpr uint64_t kAttrIdxDevice = 1;
 constexpr uint64_t kAttrIdxNormalNc = 2;
@@ -96,6 +99,8 @@ alignas(4096) static uint64_t g_l1[512];
 alignas(4096) static uint64_t g_l2_lowram[512];
 alignas(4096) static uint64_t g_l3_dma0[512];
 alignas(4096) static uint64_t g_l3_dma1[512];
+alignas(4096) static uint64_t g_l3_extra[8][512];
+static unsigned g_l3_extra_next = 0;
 
 extern "C" {
 extern char __dma_nc_start[];
@@ -124,9 +129,12 @@ static void build_map() {
     g_l3_dma0[i] = 0;
     g_l3_dma1[i] = 0;
   }
-
-  constexpr uint64_t kPtePxN = 1ull << 53;
-  constexpr uint64_t kPteUxN = 1ull << 54;
+  for (unsigned t = 0; t < (sizeof(g_l3_extra) / sizeof(g_l3_extra[0])); ++t) {
+    for (unsigned i = 0; i < 512; ++i) {
+      g_l3_extra[t][i] = 0;
+    }
+  }
+  g_l3_extra_next = 0;
 
   g_l0[0] = pte_table(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(g_l1)));
 
@@ -182,6 +190,40 @@ static void build_map() {
 
   dsb_ish();
 }
+
+static inline uintptr_t align_down(uintptr_t v, uintptr_t a) {
+  return v & ~(a - 1u);
+}
+
+static uint64_t* ensure_l3_for_lowram_block(unsigned l2_index) {
+  if (l2_index >= 512) return nullptr;
+  uint64_t e = g_l2_lowram[l2_index];
+  const uint64_t type = e & 0b11ull;
+
+  if (type == 0b11ull) {
+    uintptr_t table_phys = static_cast<uintptr_t>(e & 0x0000FFFFFFFFF000ull);
+    return reinterpret_cast<uint64_t*>(table_phys);
+  }
+  if (type != 0b01ull) {
+    return nullptr;
+  }
+  if (g_l3_extra_next >= (sizeof(g_l3_extra) / sizeof(g_l3_extra[0]))) {
+    return nullptr;
+  }
+
+  uint64_t* l3 = g_l3_extra[g_l3_extra_next++];
+  const uint64_t attr_index = (e >> 2) & 0x7ull;
+  const uint64_t sh = (e >> 8) & 0x3ull;
+  const uint64_t xn = e & (kPtePxN | kPteUxN);
+
+  const uintptr_t block_base = static_cast<uintptr_t>(l2_index) * kL2BlockSize;
+  for (unsigned i = 0; i < 512; ++i) {
+    uintptr_t pa = block_base + (static_cast<uintptr_t>(i) * kPageSize);
+    l3[i] = pte_page(static_cast<uint64_t>(pa), attr_index, sh) | xn;
+  }
+  g_l2_lowram[l2_index] = pte_table(static_cast<uint64_t>(reinterpret_cast<uintptr_t>(l3)));
+  return l3;
+}
 }  // namespace
 
 void mmu_dump_state() {
@@ -236,3 +278,27 @@ void mmu_init(bool enable) {
   isb();
 }
 
+int mmu_enabled(void) {
+  return (read_sctlr_el1() & 1u) != 0;
+}
+
+int mmu_guard_page(void* addr) {
+  if (!addr) return -1;
+  if (!mmu_enabled()) return -1;
+
+  uintptr_t va = align_down(reinterpret_cast<uintptr_t>(addr), kPageSize);
+  if (va >= kL1BlockSize) return -1;
+
+  const unsigned l2_index = static_cast<unsigned>(va / kL2BlockSize);
+  const unsigned l3_index = static_cast<unsigned>((va % kL2BlockSize) / kPageSize);
+
+  uint64_t* l3 = ensure_l3_for_lowram_block(l2_index);
+  if (!l3) return -1;
+
+  l3[l3_index] = 0;
+  dsb_ish();
+  tlbi_vmalle1();
+  dsb_ish();
+  isb();
+  return 0;
+}

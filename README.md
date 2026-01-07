@@ -33,6 +33,7 @@ All knobs are Make variables:
 - `MUTEX_PI=0|1` (default: `1`)
 - `SYNC_LAB_MODE=0|1|...` (default: `0`)
 - `MEM_LAB_MODE=0|1` (default: `0`)
+- `STACK_LAB_MODE=0|1` (default: `0`)
 - `RPI4_UART_CLOCK_HZ=<hz>` (only used when building `PLATFORM=rpi4`)
 
 ## Memory layout
@@ -97,6 +98,37 @@ Examples:
 
 - Run the full suite: `DMA_LAB_MODE=1 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
 - Run a single case (best-effort): `DMA_LAB_MODE=3 DMA_WINDOW_POLICY=CACHEABLE scripts/dma_lab_run.sh`
+
+### Memory lab mode
+
+`MEM_LAB_MODE=1` runs deterministic fragmentation demos and then halts. Run it with:
+
+- `MEM_LAB_MODE=1 scripts/mem_lab_run.sh`
+
+Expected log contains:
+
+- `[mem-lab][pool] internal_frag_pct=...`
+- `[mem-lab][malloc] external_frag_pct=...`
+- `[mem-lab][malloc] big alloc FAILED (fragmentation)`
+
+### Sync + scheduling labs
+
+Run the priority inversion + PI lab:
+
+- `SCHED_POLICY=PRIO SYNC_LAB_MODE=1 scripts/sync_lab_run.sh`
+
+Run the deadlock lab variants (2 locks / 2 threads):
+
+- Deadlock reproduction: `SCHED_POLICY=PRIO SYNC_LAB_MODE=2 scripts/sync_lab_run.sh`
+- Lock ordering fix: `SCHED_POLICY=PRIO SYNC_LAB_MODE=3 scripts/sync_lab_run.sh`
+- Trylock+backoff fix: `SCHED_POLICY=PRIO SYNC_LAB_MODE=4 scripts/sync_lab_run.sh`
+- Lockdep detection: `SCHED_POLICY=PRIO SYNC_LAB_MODE=5 scripts/sync_lab_run.sh`
+
+### Stack lab mode
+
+`STACK_LAB_MODE=1` intentionally touches a guard page below a thread stack and is expected to fault:
+
+- `STACK_LAB_MODE=1 scripts/stack_lab_run.sh`
 
 ## Design case studies (STAR)
 

@@ -17,6 +17,9 @@ struct mutex {
 void mutex_init(mutex* m);
 void mutex_set_pi_enabled(mutex* m, int enabled);
 void mutex_lock(mutex* m);
+// Try to acquire a mutex without blocking.
+// Returns 0 on success, -1 if the mutex is currently owned by another thread.
+int  mutex_trylock(mutex* m);
 void mutex_unlock(mutex* m);
 
 // Counting semaphore.
@@ -32,4 +35,3 @@ void sem_up(semaphore* s);
 #ifdef __cplusplus
 }
 #endif
-

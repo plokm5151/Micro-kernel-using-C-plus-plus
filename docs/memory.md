@@ -29,6 +29,13 @@ buffers), a **fixed-size pool** is often a better fit:
 
 Implementation: `include/mem_pool.h`, `src/mem_pool.cc`.
 
+In addition to the standalone lab, the kernel also uses a fixed-size pool for
+real kernel objects:
+
+- **Thread objects** are allocated from a `mem_pool` initialized in `sched_init`
+  (see `src/thread.cc`). This makes the “embedded likes pools” argument
+  concrete: predictable allocation with no external fragmentation.
+
 ## Internal vs external fragmentation (demo)
 
 This repo includes a deterministic lab that prints **quantifiable evidence** for
@@ -77,6 +84,8 @@ Thread stacks are initialized with:
 
 - a **guard region** at the bottom of the stack (detects overflow past the base)
 - a **watermark fill pattern** for the remaining unused area (estimates high-water mark)
+- an **MMU guard page** below the stack base (unmapped 4 KiB page; catches
+  overflows immediately with a synchronous exception when the MMU is enabled)
 
 The scheduler tick path checks the current thread’s guard on every timer tick
 and halts with a diagnostic if it is corrupted.
@@ -86,3 +95,17 @@ APIs:
 - `thread_stack_guard_ok(t)` returns 1 if the guard is intact.
 - `thread_stack_high_watermark_bytes(t)` returns an estimated maximum stack
   usage (bytes) since the thread was created.
+
+### Stack lab (guard page)
+
+To validate that the guard page is really active under MMU+caches, run the stack
+lab which intentionally faults by touching the unmapped page below the stack:
+
+```sh
+STACK_LAB_MODE=1 scripts/stack_lab_run.sh
+```
+
+Expected log contains:
+
+- `[stack-lab] writing guard page ...`
+- `[EXC] ... (DABT) ...`

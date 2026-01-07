@@ -2,7 +2,7 @@
 set -euo pipefail
 
 if ! command -v qemu-system-aarch64 >/dev/null 2>&1; then
-  echo "::error ::qemu-system-aarch64 not found in PATH; install QEMU to run DMA lab"
+  echo "::error ::qemu-system-aarch64 not found in PATH; install QEMU to run memory lab"
   exit 2
 fi
 
@@ -11,21 +11,19 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${REPO_ROOT}"
 
 BUILD_DIR="${REPO_ROOT}/build"
-LOG_PATH="${BUILD_DIR}/qemu-dma-lab.log"
-TRACE_LOG="${BUILD_DIR}/qemu-dma-lab-trace.log"
+LOG_PATH="${BUILD_DIR}/qemu-mem-lab.log"
+TRACE_LOG="${BUILD_DIR}/qemu-mem-lab-trace.log"
 
-DMA_WINDOW_POLICY="${DMA_WINDOW_POLICY:-CACHEABLE}"
-DMA_LAB_MODE="${DMA_LAB_MODE:-1}"
+MEM_LAB_MODE="${MEM_LAB_MODE:-1}"
 
-echo "[dma-lab] Building kernel (DMA_WINDOW_POLICY=${DMA_WINDOW_POLICY} DMA_LAB_MODE=${DMA_LAB_MODE})..."
+echo "[mem-lab] Building kernel (MEM_LAB_MODE=${MEM_LAB_MODE})..."
 make clean
 if ! make -j \
-  MEM_LAB_MODE=0 \
+  DMA_LAB_MODE=0 \
   SYNC_LAB_MODE=0 \
   STACK_LAB_MODE=0 \
   SCHED_POLICY=RR \
-  DMA_WINDOW_POLICY="${DMA_WINDOW_POLICY}" \
-  DMA_LAB_MODE="${DMA_LAB_MODE}"; then
+  MEM_LAB_MODE="${MEM_LAB_MODE}"; then
   echo "::error ::Kernel build failed; see make output above"
   exit 1
 fi
@@ -48,18 +46,18 @@ CMD=(
   -D "${TRACE_LOG}"
 )
 
-echo "[dma-lab] Launching QEMU with 6s timeout..."
+echo "[mem-lab] Launching QEMU with 6s timeout..."
 set +e
 timeout 6s "${CMD[@]}" 2>&1 | tee "${LOG_PATH}"
 status=${PIPESTATUS[0]}
 set -e
 
 if [[ ${status} -eq 124 ]]; then
-  echo "[dma-lab] QEMU terminated after timeout (expected for halted lab)."
+  echo "[mem-lab] QEMU terminated after timeout (expected for halted lab)."
   status=0
 fi
 if [[ ${status} -ne 0 ]]; then
-  echo "[dma-lab] QEMU exited with status ${status}."
+  echo "[mem-lab] QEMU exited with status ${status}."
   exit "${status}"
 fi
 
@@ -70,23 +68,21 @@ if [[ -s "${TRACE_LOG}" ]] && grep -Eq '(^unimp([[:space:]:]|$)|unimp:|unimpleme
 fi
 
 if grep -qF "[EXC]" "${LOG_PATH}"; then
-  echo "::error ::Exception detected in lab log; see ESR/ELR/SPSR above"
+  echo "::error ::Unexpected exception in memory lab log; see ${LOG_PATH}"
   exit 1
 fi
 
-if ! grep -qF "[mmu] enabled" "${LOG_PATH}"; then
-  echo "::error ::Missing expected MMU enable message: [mmu] enabled"
-  exit 1
-fi
-if ! grep -qF "(C=1, I=1, M=1)" "${LOG_PATH}"; then
-  echo "::error ::Missing expected SCTLR bits: (C=1, I=1, M=1)"
-  exit 1
-fi
+required=(
+  "[mem-lab][pool] internal_frag_pct="
+  "[mem-lab][malloc] external_frag_pct="
+  "big alloc FAILED (fragmentation)"
+)
+for needle in "${required[@]}"; do
+  if ! grep -qF "${needle}" "${LOG_PATH}"; then
+    echo "::error ::Missing expected memory lab output: ${needle}"
+    tail -n 120 "${LOG_PATH}" || true
+    exit 1
+  fi
+done
 
-if ! grep -qF "[dma-lab] result PASS" "${LOG_PATH}"; then
-  echo "::error ::DMA lab did not report PASS; see ${LOG_PATH}"
-  tail -n 80 "${LOG_PATH}" || true
-  exit 1
-fi
-
-echo "[dma-lab] All lab checks passed."
+echo "[mem-lab] All lab checks passed."

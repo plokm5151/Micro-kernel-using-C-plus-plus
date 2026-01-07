@@ -16,7 +16,14 @@ TRACE_LOG="${BUILD_DIR}/qemu-trace.log"
 
 echo "[smoke] Building kernel (make clean && make -j)..."
 make clean
-if ! make -j; then
+SMOKE_MAKE_ARGS=(
+  DMA_LAB_MODE=0
+  MEM_LAB_MODE=0
+  SYNC_LAB_MODE=0
+  STACK_LAB_MODE=0
+  SCHED_POLICY=RR
+)
+if ! make -j "${SMOKE_MAKE_ARGS[@]}"; then
   echo "::error ::Kernel build failed; see make output above"
   exit 1
 fi
