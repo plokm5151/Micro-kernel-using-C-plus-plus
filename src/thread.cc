@@ -9,12 +9,135 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define RR_QUANTUM_TICKS 5
-
 namespace {
+constexpr int kThreadReady = 0;
+constexpr int kThreadBlocked = 1;
+
+constexpr int kDefaultPriority = 10;
+constexpr int kMaxPriority = 31;
+
+constexpr int kQuantumTicks = 5;
+
+constexpr unsigned kNeedReschedNone = 0;
+constexpr unsigned kNeedReschedNormal = 1;
+#if defined(SCHED_POLICY_PRIO)
+constexpr unsigned kNeedReschedRotate = 2;
+#endif
+
+#if defined(SCHED_POLICY_RR) && defined(SCHED_POLICY_PRIO)
+#error "Define only one of SCHED_POLICY_{RR,PRIO}"
+#endif
+#if !defined(SCHED_POLICY_RR) && !defined(SCHED_POLICY_PRIO)
+#define SCHED_POLICY_RR 1
+#endif
+
 Thread* rq_head = nullptr;
 Thread* rq_tail = nullptr;
 int next_thread_id = 1;
+
+static inline int clamp_priority(int prio) {
+  if (prio < 0) return 0;
+  if (prio > kMaxPriority) return kMaxPriority;
+  return prio;
+}
+
+static inline bool is_ready(const Thread* t) {
+  return t && t->state == kThreadReady;
+}
+
+static void rq_append(Thread* t) {
+  if (!t) return;
+  if (!rq_head) {
+    rq_head = t;
+    rq_tail = t;
+    t->next = t;
+    return;
+  }
+  t->next = rq_head;
+  rq_tail->next = t;
+  rq_tail = t;
+}
+
+static void rq_remove(Thread* t) {
+  if (!rq_head || !t) return;
+  if (rq_head == t && rq_tail == t) {
+    rq_head = nullptr;
+    rq_tail = nullptr;
+    t->next = nullptr;
+    return;
+  }
+
+  Thread* prev = rq_head;
+  while (prev->next != t && prev->next != rq_head) {
+    prev = prev->next;
+  }
+  if (prev->next != t) {
+    return;  // not found
+  }
+
+  prev->next = t->next;
+  if (rq_head == t) rq_head = t->next;
+  if (rq_tail == t) rq_tail = prev;
+  t->next = nullptr;
+}
+
+#if defined(SCHED_POLICY_PRIO)
+static int rq_max_ready_priority() {
+  if (!rq_head) return -1;
+  int best = -1;
+  Thread* start = rq_head;
+  Thread* t = start;
+  do {
+    if (is_ready(t) && t->effective_priority > best) {
+      best = t->effective_priority;
+    }
+    t = t->next;
+  } while (t && t != start);
+  return best;
+}
+
+static bool rq_has_ready_prio_gt(int prio) {
+  if (!rq_head) return false;
+  Thread* start = rq_head;
+  Thread* t = start;
+  do {
+    if (is_ready(t) && t->effective_priority > prio) {
+      return true;
+    }
+    t = t->next;
+  } while (t && t != start);
+  return false;
+}
+
+static Thread* prio_pick_next(Thread* cur, bool exclude_current, bool rotate_equal) {
+  if (!rq_head) return cur;
+
+  const int best_prio = rq_max_ready_priority();
+  if (best_prio < 0) return cur;
+
+  if (!exclude_current && !rotate_equal && cur && is_ready(cur) && cur->effective_priority == best_prio) {
+    return cur;
+  }
+
+  Thread* start = rq_head;
+  if ((exclude_current || rotate_equal) && cur && cur->next) {
+    start = cur->next;
+  }
+
+  Thread* t = start;
+  do {
+    if (is_ready(t) && t->effective_priority == best_prio && (!exclude_current || t != cur)) {
+      return t;
+    }
+    t = t->next;
+  } while (t && t != start);
+
+  if (cur && is_ready(cur) && cur->effective_priority == best_prio) {
+    return cur;
+  }
+  return rq_head;
+}
+#endif  // SCHED_POLICY_PRIO
 
 static void do_switch(Thread* cur, Thread* next) {
   auto* cpu = cpu_local();
@@ -34,6 +157,10 @@ extern "C" void sched_init(void) {
 }
 
 extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size) {
+  return thread_create_prio(entry, arg, stack_size, kDefaultPriority);
+}
+
+extern "C" Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t stack_size, int base_priority) {
   uart_puts("[diag] thread_create enter\n");
   if (entry == nullptr || stack_size == 0) {
     uart_puts("[sched][err] invalid thread params\n");
@@ -87,7 +214,13 @@ extern "C" Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_s
   t->id = next_thread_id++;
   t->stack_base = stack;
   t->stack_size = stack_size;
-  t->budget = RR_QUANTUM_TICKS;
+  t->budget = kQuantumTicks;
+
+  t->base_priority = clamp_priority(base_priority);
+  t->effective_priority = t->base_priority;
+  t->state = kThreadReady;
+  t->wait_next = nullptr;
+  t->owned_mutexes = nullptr;
   // FPSIMD state was zeroed above: fpsimd_valid=0, vregs=0, fpcr/fpsr=0.
 
   uart_puts("[sched][diag] thread created id=");
@@ -105,26 +238,24 @@ extern "C" void sched_add(Thread* t) {
   if (!t) {
     return;
   }
-  if (!rq_head) {
-    rq_head = t;
-    rq_tail = t;
-    t->next = t;
-    return;
+  if (t->state != kThreadReady) {
+    t->state = kThreadReady;
   }
-  t->next = rq_head;
-  rq_tail->next = t;
-  rq_tail = t;
+  rq_append(t);
 }
 
 extern "C" void sched_start(void) {
   Thread* cur = rq_head;
+#if defined(SCHED_POLICY_PRIO)
+  cur = prio_pick_next(nullptr, /*exclude_current=*/false, /*rotate_equal=*/false);
+#endif
   if (!cur) {
     uart_puts("[sched] no threads\n");
     while (1) {
       asm volatile("wfe");
     }
   }
-  cur->budget = RR_QUANTUM_TICKS;
+  cur->budget = kQuantumTicks;
   cpu_local()->current_thread = cur;
   void* boot_sp = nullptr;
   arch_switch(&boot_sp, cur->sp);
@@ -136,11 +267,23 @@ extern "C" void sched_start(void) {
 
 extern "C" void thread_yield(void) {
   auto* cpu = cpu_local();
+  if (!cpu || cpu->preempt_cnt) {
+    return;
+  }
   Thread* cur = cpu->current_thread;
+  if (!cur) return;
+
+#if defined(SCHED_POLICY_PRIO)
+  Thread* next = prio_pick_next(cur, /*exclude_current=*/true, /*rotate_equal=*/true);
+  if (next && next != cur) {
+    do_switch(cur, next);
+  }
+#else
   Thread* next = (cur && cur->next) ? cur->next : cur;
   if (next && next != cur) {
     do_switch(cur, next);
   }
+#endif
 }
 
 extern "C" __attribute__((noreturn)) void thread_exit(void) {
@@ -159,30 +302,100 @@ extern "C" void sched_on_tick(void) {
   if (cpu->preempt_cnt) {
     return;
   }
+
+#if defined(SCHED_POLICY_PRIO)
+  if (!is_ready(cur)) {
+    cpu->need_resched = kNeedReschedNormal;
+    return;
+  }
+  if (rq_has_ready_prio_gt(cur->effective_priority)) {
+    cpu->need_resched = kNeedReschedNormal;
+    return;
+  }
+#endif
+
   if (cur->budget > 0) {
     cur->budget--;
   }
   if (cur->budget <= 0) {
-    cpu->need_resched = 1;
-    cur->budget = RR_QUANTUM_TICKS;
+  #if defined(SCHED_POLICY_PRIO)
+    cpu->need_resched = kNeedReschedRotate;
+  #else
+    cpu->need_resched = kNeedReschedNormal;
+  #endif
+    cur->budget = kQuantumTicks;
   }
 }
 
 extern "C" void sched_resched_from_irq_tail(void) {
   auto* cpu = cpu_local();
   Thread* cur = cpu->current_thread;
-  if (!cur) {
-    cpu->need_resched = 0;
-    return;
-  }
   if (cpu->preempt_cnt) {
     return;
   }
-  Thread* next = cur->next ? cur->next : cur;
-  if (next == cur) {
-    cpu->need_resched = 0;
+
+  Thread* next = nullptr;
+#if defined(SCHED_POLICY_PRIO)
+  const bool rotate = (cpu->need_resched == kNeedReschedRotate);
+  next = prio_pick_next(cur, /*exclude_current=*/rotate, /*rotate_equal=*/rotate);
+#else
+  if (cur && is_ready(cur) && cur->next) {
+    next = cur->next;
+  } else {
+    next = rq_head;
+  }
+#endif
+
+  if (!cur || !next || next == cur) {
+    cpu->need_resched = kNeedReschedNone;
     return;
   }
+
   do_switch(cur, next);
-  cpu->need_resched = 0;
+  cpu->need_resched = kNeedReschedNone;
+}
+
+extern "C" void sched_block_current(void) {
+  auto* cpu = cpu_local();
+  Thread* cur = cpu ? cpu->current_thread : nullptr;
+  if (!cur) return;
+  if (cur->state == kThreadBlocked) return;
+  rq_remove(cur);
+  cur->state = kThreadBlocked;
+  cur->wait_next = nullptr;
+}
+
+extern "C" void sched_make_runnable(Thread* t) {
+  if (!t) return;
+  if (t->state == kThreadReady) return;
+  t->state = kThreadReady;
+  t->wait_next = nullptr;
+  t->budget = kQuantumTicks;
+  rq_append(t);
+}
+
+extern "C" int thread_base_priority(const Thread* t) {
+  return t ? t->base_priority : 0;
+}
+
+extern "C" int thread_effective_priority(const Thread* t) {
+  return t ? t->effective_priority : 0;
+}
+
+extern "C" void thread_set_base_priority(Thread* t, int prio) {
+  if (!t) return;
+  int p = clamp_priority(prio);
+  t->base_priority = p;
+  if (t->effective_priority < p) {
+    t->effective_priority = p;
+  }
+}
+
+extern "C" void thread_set_effective_priority(Thread* t, int prio) {
+  if (!t) return;
+  int p = clamp_priority(prio);
+  if (p < t->base_priority) {
+    p = t->base_priority;
+  }
+  t->effective_priority = p;
 }

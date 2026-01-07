@@ -42,6 +42,15 @@ LDFLAGS := -nostdlib -static -T $(LDSCRIPT)
 DMA_WINDOW_POLICY ?= CACHEABLE
 DMA_LAB_MODE ?= 0
 
+# Scheduler policy (default: RR to preserve CI behavior).
+SCHED_POLICY ?= RR
+
+# Enable priority inheritance for mutexes by default.
+MUTEX_PI ?= 1
+
+# Synchronization/scheduler lab mode (default: off).
+SYNC_LAB_MODE ?= 0
+
 # Platform selection.
 # - virt: QEMU -machine virt (default, used by CI smoke test)
 # - rpi4: Raspberry Pi 4 (AArch64 firmware-loaded kernel8.img)
@@ -75,6 +84,17 @@ endif
 
 CXXFLAGS += -DDMA_LAB_MODE=$(DMA_LAB_MODE)
 
+ifeq ($(SCHED_POLICY),RR)
+CXXFLAGS += -DSCHED_POLICY_RR=1
+else ifeq ($(SCHED_POLICY),PRIO)
+CXXFLAGS += -DSCHED_POLICY_PRIO=1
+else
+$(error SCHED_POLICY must be RR or PRIO)
+endif
+
+CXXFLAGS += -DMUTEX_PI=$(MUTEX_PI)
+CXXFLAGS += -DSYNC_LAB_MODE=$(SYNC_LAB_MODE)
+
 OBJS := \
   $(OBJ_DIR)/start.o \
   $(OBJ_DIR)/vectors.o \
@@ -88,10 +108,12 @@ OBJS := \
   $(OBJ_DIR)/timer.o \
   $(OBJ_DIR)/irq.o \
   $(OBJ_DIR)/kmem.o \
+  $(OBJ_DIR)/sync.o \
   $(OBJ_DIR)/thread.o \
   $(OBJ_DIR)/preempt.o \
   $(OBJ_DIR)/dma.o \
   $(OBJ_DIR)/dma_lab.o \
+  $(OBJ_DIR)/sync_lab.o \
   $(OBJ_DIR)/except.o \
   $(OBJ_DIR)/fpsimd.o \
   $(OBJ_DIR)/kmain.o
@@ -140,6 +162,10 @@ $(OBJ_DIR)/kmem.o: src/kmem.cc include/kmem.h
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
+$(OBJ_DIR)/sync.o: src/sync.cc include/sync.h include/thread.h include/arch/cpu_local.h include/preempt.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
 $(OBJ_DIR)/thread.o: src/thread.cc include/thread.h include/arch/ctx.h include/arch/cpu_local.h include/kmem.h
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -mgeneral-regs-only -Iinclude -Isrc -c $< -o $@
@@ -153,6 +179,10 @@ $(OBJ_DIR)/dma.o: src/dma.cc include/dma.h include/arch/barrier.h
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
 $(OBJ_DIR)/dma_lab.o: src/dma_lab.cc include/dma_lab.h include/dma.h include/kmem.h include/arch/barrier.h
+	mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
+
+$(OBJ_DIR)/sync_lab.o: src/sync_lab.cc include/sync_lab.h include/sync.h include/thread.h
 	mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) -Iinclude -Isrc -c $< -o $@
 
