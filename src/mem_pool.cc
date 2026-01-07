@@ -91,6 +91,7 @@ extern "C" void* mem_pool_alloc(struct mem_pool* pool) {
 extern "C" int mem_pool_free(struct mem_pool* pool, void* p) {
   if (!pool || !p) return -1;
   if (!mem_pool_owns(pool, p)) return -1;
+  if (pool->free_count >= pool->block_count) return -1;
 
 #if MEM_POOL_DEBUG
   if (freelist_contains(pool->free_list, p)) {
@@ -125,4 +126,3 @@ extern "C" size_t mem_pool_capacity(const struct mem_pool* pool) {
 extern "C" size_t mem_pool_available(const struct mem_pool* pool) {
   return pool ? pool->free_count : 0;
 }
-

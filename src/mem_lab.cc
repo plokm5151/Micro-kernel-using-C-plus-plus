@@ -218,9 +218,11 @@ static void demo_malloc_external_fragmentation() {
   put_u64("[mem-lab][malloc] heap_bytes=", kHeapBytes);
   put_u64("[mem-lab][malloc] header_bytes=", sizeof(heap_block));
 
-  // Allocate many medium chunks, then free every other chunk.
+  // Allocate medium chunks until exhaustion, then free every other chunk.
+  // This creates many holes while ensuring there is no large free tail block,
+  // so a big allocation deterministically fails despite ample total free bytes.
   constexpr size_t kChunk = 1024;
-  constexpr size_t kMax = 32;
+  constexpr size_t kMax = 96;
   void* ptrs[kMax] = {};
 
   size_t steps_total = 0;
@@ -230,7 +232,9 @@ static void demo_malloc_external_fragmentation() {
   for (size_t i = 0; i < kMax; ++i) {
     size_t steps = 0;
     void* p = heap_alloc_first_fit(heap, kHeapBytes, kChunk, &steps);
-    if (!p) break;
+    if (!p) {
+      break;
+    }
     ptrs[i] = p;
     allocs++;
     steps_total += steps;
@@ -263,6 +267,8 @@ static void demo_malloc_external_fragmentation() {
   constexpr size_t kBig = 8 * 1024;
   if (total_free > kBig && largest_free < kBig) {
     uart_puts("[mem-lab][malloc] expected: total_free > big && largest_free < big\n");
+  } else {
+    uart_puts("[mem-lab][malloc] WARN: fragmentation shape unexpected; demo may be weaker\n");
   }
   size_t steps = 0;
   void* big = heap_alloc_first_fit(heap, kHeapBytes, kBig, &steps);
