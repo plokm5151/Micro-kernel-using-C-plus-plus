@@ -11,6 +11,7 @@
 #include "preempt.h"
 #include "dma.h"
 #include "dma_lab.h"
+#include "mem_lab.h"
 #include "sync_lab.h"
 
 extern "C" {
@@ -33,6 +34,10 @@ extern "C" {
 
 #ifndef SYNC_LAB_MODE
 #define SYNC_LAB_MODE 0
+#endif
+
+#ifndef MEM_LAB_MODE
+#define MEM_LAB_MODE 0
 #endif
 
 namespace {
@@ -104,7 +109,7 @@ extern "C" void kmain() {
   uart_puts("[build] "); uart_puts(__DATE__); uart_puts(" "); uart_puts(__TIME__); uart_puts("\n");
 
   uart_puts("[dma-policy] "); uart_puts(DMA_WINDOW_POLICY_STR); uart_puts("\n");
-#if !DMA_LAB_MODE
+#if !DMA_LAB_MODE && !MEM_LAB_MODE
   if (!platform_full_kernel_supported()) {
     uart_puts("[platform] "); uart_puts(platform_name());
     uart_puts(" bring-up: IRQ controller not enabled yet; halting\n");
@@ -115,6 +120,13 @@ extern "C" void kmain() {
   uart_puts("[dma-lab] mode="); uart_print_u64(static_cast<unsigned long long>(DMA_LAB_MODE)); uart_puts("\n");
   dma_lab_run(static_cast<unsigned>(DMA_LAB_MODE));
   uart_puts("[dma-lab] halting\n");
+  while (1) { asm volatile("wfe"); }
+#endif
+
+#if MEM_LAB_MODE
+  uart_puts("[mem-lab] mode="); uart_print_u64(static_cast<unsigned long long>(MEM_LAB_MODE)); uart_puts("\n");
+  mem_lab_run(static_cast<unsigned>(MEM_LAB_MODE));
+  uart_puts("[mem-lab] halting\n");
   while (1) { asm volatile("wfe"); }
 #endif
 

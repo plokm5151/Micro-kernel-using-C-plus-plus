@@ -57,6 +57,12 @@ int  thread_base_priority(const Thread* t);
 int  thread_effective_priority(const Thread* t);
 void thread_set_base_priority(Thread* t, int prio);
 void thread_set_effective_priority(Thread* t, int prio);
+
+// Stack diagnostics for kernel threads.
+// These operate on Thread::stack_base/stack_size and require stack watermark
+// initialization (done by thread_create*) to be meaningful.
+int thread_stack_guard_ok(const Thread* t);
+size_t thread_stack_high_watermark_bytes(const Thread* t);
 #ifdef __cplusplus
 }
 #endif

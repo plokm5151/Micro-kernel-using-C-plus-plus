@@ -18,6 +18,10 @@ constexpr int kMaxPriority = 31;
 
 constexpr int kQuantumTicks = 5;
 
+constexpr uint64_t kStackGuardMagic = 0x737461636b677561ull;  // "stackgua"
+constexpr size_t kStackGuardBytes = 64;
+constexpr uint8_t kStackWatermark = 0xA5;
+
 constexpr unsigned kNeedReschedNone = 0;
 constexpr unsigned kNeedReschedNormal = 1;
 #if defined(SCHED_POLICY_PRIO)
@@ -43,6 +47,65 @@ static inline int clamp_priority(int prio) {
 
 static inline bool is_ready(const Thread* t) {
   return t && t->state == kThreadReady;
+}
+
+static void stack_init_guard_and_watermark(void* base, size_t size) {
+  if (!base || size == 0) return;
+  volatile uint8_t* p = reinterpret_cast<volatile uint8_t*>(base);
+
+  // Guard region: fixed pattern at the bottom of the stack (lowest addresses).
+  const size_t guard = (size >= kStackGuardBytes) ? kStackGuardBytes : size;
+  for (size_t off = 0; off < guard; off += sizeof(uint64_t)) {
+    const size_t remain = guard - off;
+    if (remain < sizeof(uint64_t)) {
+      for (size_t i = 0; i < remain; ++i) {
+        p[off + i] = static_cast<uint8_t>((kStackGuardMagic >> (i * 8u)) & 0xFFu);
+      }
+    } else {
+      *reinterpret_cast<volatile uint64_t*>(reinterpret_cast<volatile void*>(p + off)) = kStackGuardMagic;
+    }
+  }
+
+  // Watermark: fill the rest of the stack so we can estimate high-water mark.
+  for (size_t i = guard; i < size; ++i) {
+    p[i] = kStackWatermark;
+  }
+}
+
+static bool stack_guard_ok(const Thread* t) {
+  if (!t || !t->stack_base || t->stack_size == 0) return true;
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(t->stack_base);
+  const size_t guard = (t->stack_size >= kStackGuardBytes) ? kStackGuardBytes : t->stack_size;
+
+  for (size_t off = 0; off < guard; off += sizeof(uint64_t)) {
+    const size_t remain = guard - off;
+    if (remain < sizeof(uint64_t)) {
+      for (size_t i = 0; i < remain; ++i) {
+        const uint8_t expected = static_cast<uint8_t>((kStackGuardMagic >> (i * 8u)) & 0xFFu);
+        if (p[off + i] != expected) return false;
+      }
+    } else {
+      const uint64_t v = *reinterpret_cast<const uint64_t*>(p + off);
+      if (v != kStackGuardMagic) return false;
+    }
+  }
+  return true;
+}
+
+static size_t stack_high_watermark_bytes(const Thread* t) {
+  if (!t || !t->stack_base || t->stack_size == 0) return 0;
+  if (t->stack_size <= kStackGuardBytes) return t->stack_size;
+
+  const uint8_t* p = reinterpret_cast<const uint8_t*>(t->stack_base);
+  size_t unused = 0;
+  for (size_t i = kStackGuardBytes; i < t->stack_size; ++i) {
+    if (p[i] != kStackWatermark) break;
+    unused++;
+  }
+
+  const size_t usable = t->stack_size - kStackGuardBytes;
+  const size_t used = (unused <= usable) ? (usable - unused) : usable;
+  return used;
 }
 
 static void rq_append(Thread* t) {
@@ -184,11 +247,7 @@ extern "C" Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t st
     uart_puts("[sched][err] no memory for thread stack\n");
     return nullptr;
   }
-
-  volatile uint8_t* stack_bytes = reinterpret_cast<volatile uint8_t*>(stack);
-  for (size_t i = 0; i < stack_size; ++i) {
-    stack_bytes[i] = 0;
-  }
+  stack_init_guard_and_watermark(stack, stack_size);
 
   uintptr_t stack_top = reinterpret_cast<uintptr_t>(stack) + stack_size;
   stack_top &= ~static_cast<uintptr_t>(0xF);
@@ -299,6 +358,14 @@ extern "C" void sched_on_tick(void) {
   if (!cur) {
     return;
   }
+  if (!stack_guard_ok(cur)) {
+    uart_puts("[stack] overflow detected tid=");
+    uart_print_u64(static_cast<unsigned long long>(cur->id));
+    uart_puts("\n");
+    while (1) {
+      asm volatile("wfe");
+    }
+  }
   if (cpu->preempt_cnt) {
     return;
   }
@@ -398,4 +465,12 @@ extern "C" void thread_set_effective_priority(Thread* t, int prio) {
     p = t->base_priority;
   }
   t->effective_priority = p;
+}
+
+extern "C" int thread_stack_guard_ok(const Thread* t) {
+  return stack_guard_ok(t) ? 1 : 0;
+}
+
+extern "C" size_t thread_stack_high_watermark_bytes(const Thread* t) {
+  return stack_high_watermark_bytes(t);
 }
