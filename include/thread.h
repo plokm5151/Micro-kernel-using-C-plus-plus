@@ -2,6 +2,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct mutex;
+
 struct Thread {
   void*      sp;         // saved stack pointer (used by arch_switch)
   void     (*entry)(void*);
@@ -11,6 +13,13 @@ struct Thread {
   void*      stack_base; // for debug (not freed yet)
   size_t     stack_size;
   int        budget;     // remaining time slice (ticks)
+
+  // ---- Scheduling ----
+  int        base_priority;
+  int        effective_priority;  // may be boosted by priority inheritance
+  int        state;               // 0=READY, 1=BLOCKED
+  Thread*    wait_next;           // used by wait-queues (mutex/semaphore)
+  mutex*     owned_mutexes;       // list head for priority inheritance
 
   // ---- FPSIMD context ----
   int        fpsimd_valid;                 // 0 = never saved / initial zeros, 1 = valid saved state
@@ -31,12 +40,23 @@ extern "C" {
 #endif
 void  sched_init(void);
 Thread* thread_create(void (*entry)(void*), void* arg, size_t stack_size);
+Thread* thread_create_prio(void (*entry)(void*), void* arg, size_t stack_size, int base_priority);
 void  sched_add(Thread* t);
 void  sched_start(void);   // enter the first thread (never returns)
 void  thread_yield(void);  // cooperative switch to next thread
 __attribute__((noreturn)) void thread_exit(void);
 void  sched_resched_from_irq_tail(void);
 void  sched_on_tick(void);
+
+// Scheduler/sync helpers (used by mutex/semaphore). These must be called with
+// preemption disabled.
+void sched_block_current(void);
+void sched_make_runnable(Thread* t);
+
+int  thread_base_priority(const Thread* t);
+int  thread_effective_priority(const Thread* t);
+void thread_set_base_priority(Thread* t, int prio);
+void thread_set_effective_priority(Thread* t, int prio);
 #ifdef __cplusplus
 }
 #endif

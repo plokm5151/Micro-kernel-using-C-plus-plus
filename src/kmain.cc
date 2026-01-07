@@ -11,6 +11,7 @@
 #include "preempt.h"
 #include "dma.h"
 #include "dma_lab.h"
+#include "sync_lab.h"
 
 extern "C" {
   extern char __dma_nc_start[];
@@ -30,6 +31,10 @@ extern "C" {
 #define DMA_LAB_MODE 0
 #endif
 
+#ifndef SYNC_LAB_MODE
+#define SYNC_LAB_MODE 0
+#endif
+
 namespace {
 constexpr char kHexDigits[] = "0123456789abcdef";
 
@@ -40,12 +45,16 @@ static void uart_puthex64(uint64_t value) {
   while (idx--) uart_putc(buf[idx]);
 }
 
+#if !SYNC_LAB_MODE
 static inline void spin(unsigned n) { for (volatile unsigned i=0;i<n;i++){} }
+#endif
 }  // namespace
 
 // ---------------- Threads ----------------
+#if !SYNC_LAB_MODE
 static void a(void* arg);
 static void b(void* arg);
+#endif
 
 // ---------------- DMA self-test globals ----------------
 static uint8_t* g_dma_src_buf = nullptr;
@@ -161,6 +170,15 @@ extern "C" void kmain() {
   // ==============================
   uart_puts("[diag] sched_init\n");
   sched_init();
+
+#if SYNC_LAB_MODE
+#if !defined(SCHED_POLICY_PRIO)
+  uart_puts("[sync-lab] requires SCHED_POLICY=PRIO\n");
+  while (1) { asm volatile("wfe"); }
+#endif
+  uart_puts("[sync-lab] mode="); uart_print_u64(static_cast<unsigned long long>(SYNC_LAB_MODE)); uart_puts("\n");
+  sync_lab_setup(static_cast<unsigned>(SYNC_LAB_MODE));
+#else
   uart_puts("[diag] thread_create a\n");
   Thread* ta = thread_create(a, reinterpret_cast<void*>(0xA), 16 * 1024);
   uart_puts("[diag] thread_create b\n");
@@ -171,6 +189,7 @@ extern "C" void kmain() {
   }
   uart_puts("[diag] sched_add a\n"); sched_add(ta);
   uart_puts("[diag] sched_add b\n"); sched_add(tb);
+#endif
   uart_puts("[sched] starting (coop)\n");
 
   uart_puts("[diag] gic_init\n");
@@ -188,6 +207,7 @@ extern "C" void kmain() {
   while (1) { asm volatile("wfe"); }
 }
 
+#if !SYNC_LAB_MODE
 static void a(void* arg) {
   (void)arg;
   uart_puts("A");
@@ -208,3 +228,4 @@ static void b(void* arg) {
     spin(120000);
   }
 }
+#endif
