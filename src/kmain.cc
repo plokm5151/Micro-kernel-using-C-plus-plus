@@ -13,6 +13,7 @@
 #include "dma_lab.h"
 #include "mem_lab.h"
 #include "sync_lab.h"
+#include "lock_lab.h"
 #include "stack_lab.h"
 
 extern "C" {
@@ -45,8 +46,12 @@ extern "C" {
 #define STACK_LAB_MODE 0
 #endif
 
-#if SYNC_LAB_MODE && STACK_LAB_MODE
-#error "Enable only one of SYNC_LAB_MODE or STACK_LAB_MODE"
+#ifndef LOCK_LAB_MODE
+#define LOCK_LAB_MODE 0
+#endif
+
+#if ((DMA_LAB_MODE != 0) + (SYNC_LAB_MODE != 0) + (MEM_LAB_MODE != 0) + (STACK_LAB_MODE != 0) + (LOCK_LAB_MODE != 0)) > 1
+#error "Enable only one lab mode (DMA_LAB_MODE, SYNC_LAB_MODE, MEM_LAB_MODE, STACK_LAB_MODE, LOCK_LAB_MODE)"
 #endif
 
 namespace {
@@ -199,6 +204,12 @@ extern "C" void kmain() {
 #endif
   uart_puts("[sync-lab] mode="); uart_print_u64(static_cast<unsigned long long>(SYNC_LAB_MODE)); uart_puts("\n");
   sync_lab_setup(static_cast<unsigned>(SYNC_LAB_MODE));
+#elif LOCK_LAB_MODE
+#if !defined(SCHED_POLICY_PRIO)
+  uart_puts("[lock-lab] requires SCHED_POLICY=PRIO\n");
+  while (1) { asm volatile("wfe"); }
+#endif
+  lock_lab_setup(static_cast<unsigned>(LOCK_LAB_MODE));
 #elif STACK_LAB_MODE
   uart_puts("[stack-lab] mode="); uart_print_u64(static_cast<unsigned long long>(STACK_LAB_MODE)); uart_puts("\n");
   stack_lab_setup(static_cast<unsigned>(STACK_LAB_MODE));

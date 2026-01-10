@@ -34,6 +34,7 @@ All knobs are Make variables:
 - `SYNC_LAB_MODE=0|1|...` (default: `0`)
 - `MEM_LAB_MODE=0|1` (default: `0`)
 - `STACK_LAB_MODE=0|1` (default: `0`)
+- `LOCK_LAB_MODE=0|1|2|3|4` (default: `0`)
 - `RPI4_UART_CLOCK_HZ=<hz>` (only used when building `PLATFORM=rpi4`)
 
 ## Memory layout
@@ -123,6 +124,17 @@ Run the deadlock lab variants (2 locks / 2 threads):
 - Lock ordering fix: `SCHED_POLICY=PRIO SYNC_LAB_MODE=3 scripts/sync_lab_run.sh`
 - Trylock+backoff fix: `SCHED_POLICY=PRIO SYNC_LAB_MODE=4 scripts/sync_lab_run.sh`
 - Lockdep detection: `SCHED_POLICY=PRIO SYNC_LAB_MODE=5 scripts/sync_lab_run.sh`
+
+### Lock lab mode
+
+`LOCK_LAB_MODE!=0` runs deterministic spinlock labs (requires `SCHED_POLICY=PRIO`) and then halts.
+
+Examples:
+
+- Raw spin deadlock under strict priority preemption (expected hang, detected in IRQ): `LOCK_LAB_MODE=1 scripts/lock_lab_run.sh`
+- Preempt-safe spin_lock fix (expected PASS): `LOCK_LAB_MODE=2 scripts/lock_lab_run.sh`
+- IRQ reentrancy deadlock without irqsave (expected hang): `LOCK_LAB_MODE=3 scripts/lock_lab_run.sh`
+- spin_lock_irqsave fix (expected PASS): `LOCK_LAB_MODE=4 scripts/lock_lab_run.sh`
 
 ### Stack lab mode
 
