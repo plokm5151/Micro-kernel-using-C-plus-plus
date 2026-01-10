@@ -132,8 +132,8 @@ static void irq_worker_thread(void*) {
 
     // Keep the critical section short; interrupts are disabled here.
     spin(50000);
-    g_irq_worker_holding = 0;
     spin_unlock_irqrestore(&g_irq_lock, flags);
+    g_irq_worker_holding = 0;
     uart_puts("[lock-lab] irq-worker unlocked (irqsave)\n");
 
     // Wait for the simulated ISR path to take the lock at least once.
