@@ -22,6 +22,7 @@ if ! make -j \
   DMA_LAB_MODE=0 \
   MEM_LAB_MODE=0 \
   STACK_LAB_MODE=0 \
+  LOCK_LAB_MODE=0 \
   SCHED_POLICY=PRIO \
   SYNC_LAB_MODE="${SYNC_LAB_MODE}"; then
   echo "::error ::Kernel build failed; see make output above"

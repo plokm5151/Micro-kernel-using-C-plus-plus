@@ -8,6 +8,14 @@
 #include "thread.h"
 #include "dma.h"
 
+#ifndef LOCK_LAB_MODE
+#define LOCK_LAB_MODE 0
+#endif
+
+#if LOCK_LAB_MODE
+#include "lock_lab.h"
+#endif
+
 namespace {
 unsigned g_irq_diag_count = 0;
 unsigned g_irq_entry_budget = 8;
@@ -41,6 +49,9 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
       }
       timer_irq();
       cpu->ticks++;
+#if LOCK_LAB_MODE
+      lock_lab_irq_tick();
+#endif
       sched_on_tick();
       dma_poll_complete();
       if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
@@ -54,6 +65,9 @@ extern "C" void irq_handler_el1(struct irq_frame* frame) {
       }
       timer_irq();
       cpu->ticks++;
+#if LOCK_LAB_MODE
+      lock_lab_irq_tick();
+#endif
       sched_on_tick();
       dma_poll_complete();
       if (cpu->current_thread && cpu->preempt_cnt == 0 && cpu->need_resched) {
